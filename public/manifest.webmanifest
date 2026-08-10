@@ -1,0 +1,42 @@
+{
+  "name": "KidsLearn — Learning that feels like playing",
+  "short_name": "KidsLearn",
+  "description": "Interactive lessons, games and rewards for children aged 1–7, with a dashboard for parents.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f5fb",
+  "theme_color": "#7c4dff",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["education", "kids"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Kid mode",
+      "short_name": "Kids",
+      "description": "Jump straight into lessons and games",
+      "url": "/kids"
+    },
+    {
+      "name": "Parent dashboard",
+      "short_name": "Dashboard",
+      "description": "See how the family is doing",
+      "url": "/dashboard"
+    }
+  ]
+}
