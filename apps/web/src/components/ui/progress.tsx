@@ -1,5 +1,8 @@
+"use client";
+
 import { cn, clamp } from "@/lib/utils";
 import { toneStyles, type Tone } from "@/lib/tone";
+import { useI18n } from "@/i18n/provider";
 
 export function ProgressBar({
   value,
@@ -119,6 +122,7 @@ export function XpBar({
   level: number;
   className?: string;
 }) {
+  const { intlLocale } = useI18n();
   const pct = clamp(Math.round((xp / xpToNext) * 100), 0, 100);
   return (
     <div className={cn("flex items-center gap-3", className)}>
@@ -138,7 +142,7 @@ export function XpBar({
           />
         </div>
         <p className="t-caption mt-1 font-semibold text-content-secondary tabular-nums">
-          {xp.toLocaleString()} / {xpToNext.toLocaleString()} XP
+          {xp.toLocaleString(intlLocale)} / {xpToNext.toLocaleString(intlLocale)} XP
         </p>
       </div>
       <LevelChip level={level + 1} muted />

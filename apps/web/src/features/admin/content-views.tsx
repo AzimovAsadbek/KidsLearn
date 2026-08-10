@@ -1,33 +1,88 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Archive, CheckCircle2, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Archive, CheckCircle2, Info, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { cn, formatCompact, formatDate } from "@/lib/utils";
-import { toneStyles } from "@/lib/tone";
+import { toneStyles, TONES, type Tone } from "@/lib/tone";
 import { useI18n, useT } from "@/i18n/provider";
-import type { ContentStatus, Lesson } from "@/types";
-import { lessons } from "@/data/lessons";
-import { games } from "@/data/games";
-import { categories, subjects } from "@/data/subjects";
+import type { LessonDto, SubjectDto } from "@kidslearn/types";
+import { ApiError } from "@/lib/api/client";
+import {
+  changeLessonStatus,
+  deleteLesson,
+  fetchCategories,
+  fetchLesson,
+  fetchLessons,
+  fetchGames,
+  fetchSubjects,
+  queryKeys,
+  upsertCategory,
+  upsertLesson,
+  upsertSubject,
+} from "@/lib/api/queries";
 import { useAppStore } from "@/store/app-store";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
 import { PageHeading } from "@/components/layout/app-shell";
 import { Card, CardBody } from "@/components/ui/card";
-import { DataTable, type Column } from "@/components/ui/data-table";
+import { DataTable, Pagination, type Column } from "@/components/ui/data-table";
 import { Button, IconButton } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/field";
+import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Badge, DifficultyBadge, StatusBadge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/ui/states";
+import { EmptyState, ErrorState, SkeletonTable } from "@/components/ui/states";
 import { Modal } from "@/components/ui/overlay";
+import { LOCALES } from "@/i18n/config";
 
-const STATUSES: ContentStatus[] = ["draft", "review", "published", "archived"];
+const STATUS_OPTIONS = [
+  { value: "DRAFT", key: "admin.statusDraft" },
+  { value: "REVIEW", key: "admin.statusReview" },
+  { value: "PUBLISHED", key: "admin.statusPublished" },
+  { value: "ARCHIVED", key: "admin.statusArchived" },
+] as const;
+
+const AGE_OPTIONS = [
+  { value: "AGE_1_2", key: "age.band1_2" },
+  { value: "AGE_3_4", key: "age.band3_4" },
+  { value: "AGE_5_7", key: "age.band5_7" },
+] as const;
+
+const DIFFICULTY_OPTIONS = [
+  { value: "EASY", key: "lesson.difficultyEasy" },
+  { value: "MEDIUM", key: "lesson.difficultyMedium" },
+  { value: "HARD", key: "lesson.difficultyHard" },
+] as const;
+
+const AGE_KEY = { AGE_1_2: "age.band1_2", AGE_3_4: "age.band3_4", AGE_5_7: "age.band5_7" } as const;
 
 const DIFFICULTY_KEY = {
-  easy: "lesson.difficultyEasy",
-  medium: "lesson.difficultyMedium",
-  hard: "lesson.difficultyHard",
+  EASY: "lesson.difficultyEasy",
+  MEDIUM: "lesson.difficultyMedium",
+  HARD: "lesson.difficultyHard",
 } as const;
 
-/** Toolbar shared by the lesson and game tables. */
+const EDITOR_LOCALES = ["en", "ru", "uz"] as const;
+type EditorLocale = (typeof EDITOR_LOCALES)[number];
+
+const PAGE_SIZE = 10;
+
+function toneOf(tone: string): Tone {
+  return (TONES as readonly string[]).includes(tone) ? (tone as Tone) : "brand";
+}
+
+function statusProp(status: string): "draft" | "review" | "published" | "archived" {
+  return status.toLowerCase() as "draft" | "review" | "published" | "archived";
+}
+
+function difficultyProp(difficulty: string): "easy" | "medium" | "hard" {
+  return difficulty.toLowerCase() as "easy" | "medium" | "hard";
+}
+
+function localeLabel(code: string): string {
+  const meta = LOCALES.find((l) => l.code === code);
+  return meta ? `${meta.flag} ${meta.label}` : code;
+}
+
+/** Toolbar shared by the lesson and game tables. Bulk actions only render when a handler exists. */
 function ContentToolbar({
   query,
   onQuery,
@@ -37,8 +92,10 @@ function ContentToolbar({
   onSubject,
   age,
   onAge,
+  subjects,
   selectedCount,
   onBulk,
+  bulkPending,
 }: {
   query: string;
   onQuery: (v: string) => void;
@@ -48,8 +105,10 @@ function ContentToolbar({
   onSubject: (v: string) => void;
   age: string;
   onAge: (v: string) => void;
+  subjects: SubjectDto[];
   selectedCount: number;
-  onBulk: (action: "publish" | "archive" | "delete") => void;
+  onBulk?: (action: "publish" | "archive" | "delete") => void;
+  bulkPending?: boolean;
 }) {
   const t = useT();
 
@@ -60,48 +119,67 @@ function ContentToolbar({
           <Input
             value={query}
             onChange={(e) => onQuery(e.target.value)}
-            placeholder="Search by name…"
+            placeholder={t("admin.searchContent")}
             aria-label={t("common.search")}
             leadingIcon={<Search className="h-4 w-4" />}
           />
         </div>
         <Select aria-label={t("common.status")} value={status} onChange={(e) => onStatus(e.target.value)} className="sm:w-40">
-          <option value="">All statuses</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s[0].toUpperCase() + s.slice(1)}
+          <option value="">{t("admin.allStatuses")}</option>
+          {STATUS_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {t(option.key)}
             </option>
           ))}
         </Select>
         <Select aria-label={t("nav.subjects")} value={subject} onChange={(e) => onSubject(e.target.value)} className="sm:w-44">
-          <option value="">All subjects</option>
+          <option value="">{t("filter.allSubjects")}</option>
           {subjects.map((s) => (
             <option key={s.id} value={s.id}>
               {s.name}
             </option>
           ))}
         </Select>
-        <Select aria-label="Age band" value={age} onChange={(e) => onAge(e.target.value)} className="sm:w-32">
-          <option value="">All ages</option>
-          {["1-2", "2-3", "3-4", "4-5", "5-6", "6-7"].map((band) => (
-            <option key={band} value={band}>
-              {band}
+        <Select aria-label={t("filter.age")} value={age} onChange={(e) => onAge(e.target.value)} className="sm:w-32">
+          <option value="">{t("filter.allAges")}</option>
+          {AGE_OPTIONS.map((band) => (
+            <option key={band.value} value={band.value}>
+              {t(band.key)}
             </option>
           ))}
         </Select>
       </div>
 
-      {selectedCount > 0 ? (
+      {onBulk && selectedCount > 0 ? (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-primary/30 bg-primary-soft px-4 py-2.5">
           <p className="t-label text-primary">{t("admin.selected", { count: selectedCount })}</p>
           <div className="ml-auto flex flex-wrap gap-2">
-            <Button size="sm" variant="secondary" leadingIcon={<CheckCircle2 className="h-3.5 w-3.5" />} onClick={() => onBulk("publish")}>
-              Publish
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={bulkPending}
+              leadingIcon={<CheckCircle2 className="h-3.5 w-3.5" />}
+              onClick={() => onBulk("publish")}
+            >
+              {t("admin.publish")}
             </Button>
-            <Button size="sm" variant="secondary" leadingIcon={<Archive className="h-3.5 w-3.5" />} onClick={() => onBulk("archive")}>
-              Archive
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={bulkPending}
+              leadingIcon={<Archive className="h-3.5 w-3.5" />}
+              onClick={() => onBulk("archive")}
+            >
+              {t("admin.archive")}
             </Button>
-            <Button size="sm" variant="ghost" className="text-danger" leadingIcon={<Trash2 className="h-3.5 w-3.5" />} onClick={() => onBulk("delete")}>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-danger"
+              disabled={bulkPending}
+              leadingIcon={<Trash2 className="h-3.5 w-3.5" />}
+              onClick={() => onBulk("delete")}
+            >
               {t("common.delete")}
             </Button>
           </div>
@@ -115,66 +193,164 @@ function ContentToolbar({
 
 export function LessonsAdminView() {
   const t = useT();
-  const { intlLocale } = useI18n();
+  const { intlLocale, locale, plural } = useI18n();
   const pushToast = useAppStore((s) => s.pushToast);
+  const queryClient = useQueryClient();
 
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [subject, setSubject] = useState("");
   const [age, setAge] = useState("");
+  const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<string[]>([]);
-  const [editing, setEditing] = useState<Lesson | null>(null);
+  const [editor, setEditor] = useState<{ open: boolean; lesson: LessonDto | null }>({ open: false, lesson: null });
+  const [pendingDelete, setPendingDelete] = useState<string[] | null>(null);
 
-  const rows = useMemo(
-    () =>
-      lessons.filter((lesson) => {
-        if (query && !lesson.title.toLowerCase().includes(query.toLowerCase())) return false;
-        if (status && lesson.status !== status) return false;
-        if (subject && lesson.subjectId !== subject) return false;
-        if (age && lesson.ageBand !== age) return false;
-        return true;
+  const search = useDebouncedValue(query, 300);
+
+  const subjects = useQuery({
+    queryKey: [...queryKeys.subjects, locale],
+    queryFn: () => fetchSubjects(locale),
+  });
+
+  const lessons = useQuery({
+    queryKey: [...queryKeys.lessons({ search, status, subject, age, page, purpose: "admin" }), locale],
+    queryFn: () =>
+      fetchLessons({
+        search: search || undefined,
+        status: status || undefined,
+        subjectId: subject || undefined,
+        ageCategory: age || undefined,
+        page,
+        limit: PAGE_SIZE,
+        locale,
       }),
-    [query, status, subject, age],
-  );
+    placeholderData: (previous) => previous,
+  });
 
-  const columns: Array<Column<Lesson>> = [
+  function invalidateLessons() {
+    void queryClient.invalidateQueries({ queryKey: ["lessons"] });
+  }
+
+  function errorToast(error: unknown) {
+    pushToast({
+      title: t("state.errorTitle"),
+      description: error instanceof ApiError ? error.message : undefined,
+      tone: "coral",
+      glyph: "⚠️",
+    });
+  }
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, next }: { id: string; next: string }) => changeLessonStatus(id, next),
+    onSuccess: () => {
+      pushToast({ title: t("admin.statusChanged"), tone: "mint", glyph: "✅" });
+      invalidateLessons();
+    },
+    onError: errorToast,
+  });
+
+  const bulkStatusMutation = useMutation({
+    mutationFn: ({ ids, next }: { ids: string[]; next: string }) =>
+      Promise.all(ids.map((id) => changeLessonStatus(id, next))),
+    onSuccess: () => {
+      pushToast({ title: t("admin.statusChanged"), tone: "mint", glyph: "✅" });
+      setSelected([]);
+      invalidateLessons();
+    },
+    onError: errorToast,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (ids: string[]) => Promise.all(ids.map((id) => deleteLesson(id))),
+    onSuccess: () => {
+      pushToast({ title: t("admin.lessonDeleted"), tone: "coral", glyph: "🗑️" });
+      setSelected([]);
+      setPendingDelete(null);
+      invalidateLessons();
+    },
+    onError: (error) => {
+      setPendingDelete(null);
+      errorToast(error);
+    },
+  });
+
+  const rows = lessons.data?.items ?? [];
+  const total = lessons.data?.meta.total ?? 0;
+
+  const columns: Array<Column<LessonDto>> = [
     {
       id: "title",
-      header: "Title",
+      header: t("admin.colTitle"),
       primary: true,
       sortValue: (row) => row.title,
       cell: (row) => (
         <div className="flex items-center gap-3">
-          <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-sm text-xl", toneStyles[row.tone].soft)} aria-hidden>
+          <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-sm text-xl", toneStyles[toneOf(row.tone)].soft)} aria-hidden>
             {row.glyph}
           </span>
           <div className="min-w-0">
             <p className="truncate font-semibold text-content">{row.title}</p>
-            <p className="t-caption truncate text-content-secondary">{subjects.find((s) => s.id === row.subjectId)?.name}</p>
+            <p className="t-caption truncate text-content-secondary">{row.subject?.name ?? ""}</p>
           </div>
         </div>
       ),
     },
-    { id: "age", header: "Age", width: "w-24", sortValue: (row) => row.ageBand, cell: (row) => <Badge tone="sky" size="sm">{row.ageBand}</Badge> },
+    {
+      id: "age",
+      header: t("filter.age"),
+      width: "w-24",
+      sortValue: (row) => row.ageCategory,
+      cell: (row) => (
+        <Badge tone="sky" size="sm">
+          {t(AGE_KEY[row.ageCategory as keyof typeof AGE_KEY] ?? "age.band1_2")}
+        </Badge>
+      ),
+    },
     {
       id: "difficulty",
-      header: "Level",
+      header: t("filter.difficulty"),
       width: "w-32",
       secondary: true,
-      cell: (row) => <DifficultyBadge difficulty={row.difficulty} label={t(DIFFICULTY_KEY[row.difficulty])} />,
+      cell: (row) => (
+        <DifficultyBadge
+          difficulty={difficultyProp(row.difficulty)}
+          label={t(DIFFICULTY_KEY[row.difficulty as keyof typeof DIFFICULTY_KEY] ?? "lesson.difficultyEasy")}
+        />
+      ),
     },
-    { id: "status", header: t("common.status"), width: "w-32", sortValue: (row) => row.status, cell: (row) => <StatusBadge status={row.status} /> },
+    {
+      id: "status",
+      header: t("common.status"),
+      width: "w-40",
+      sortValue: (row) => row.status,
+      cell: (row) => (
+        <Select
+          aria-label={`${t("common.status")}: ${row.title}`}
+          value={row.status}
+          disabled={statusMutation.isPending}
+          onChange={(e) => statusMutation.mutate({ id: row.id, next: e.target.value })}
+          className="h-9 text-xs"
+        >
+          {STATUS_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {t(option.key)}
+            </option>
+          ))}
+        </Select>
+      ),
+    },
     {
       id: "completions",
-      header: "Completions",
+      header: t("admin.colCompletions"),
       align: "right",
       secondary: true,
       sortValue: (row) => row.completions,
-      cell: (row) => <span className="tabular-nums text-content-secondary">{formatCompact(row.completions)}</span>,
+      cell: (row) => <span className="tabular-nums text-content-secondary">{formatCompact(row.completions, intlLocale)}</span>,
     },
     {
       id: "updated",
-      header: "Updated",
+      header: t("admin.colUpdated"),
       secondary: true,
       sortValue: (row) => row.updatedAt,
       cell: (row) => <span className="t-caption text-content-secondary">{formatDate(row.updatedAt, intlLocale)}</span>,
@@ -186,14 +362,18 @@ export function LessonsAdminView() {
       width: "w-28",
       cell: (row) => (
         <div className="flex justify-end gap-1">
-          <IconButton label={`${t("common.edit")} ${row.title}`} size="icon-sm" onClick={() => setEditing(row)}>
+          <IconButton
+            label={`${t("common.edit")} ${row.title}`}
+            size="icon-sm"
+            onClick={() => setEditor({ open: true, lesson: row })}
+          >
             <Pencil className="h-4 w-4" />
           </IconButton>
           <IconButton
             label={`${t("common.delete")} ${row.title}`}
             size="icon-sm"
             className="text-danger"
-            onClick={() => pushToast({ title: "Deletion requires confirmation", tone: "coral", glyph: "⚠️" })}
+            onClick={() => setPendingDelete([row.id])}
           >
             <Trash2 className="h-4 w-4" />
           </IconButton>
@@ -206,170 +386,493 @@ export function LessonsAdminView() {
     <div className="mx-auto w-full max-w-[100rem]">
       <PageHeading
         title={t("nav.lessons")}
-        subtitle={`${lessons.length} lessons · ${lessons.filter((l) => l.status === "published").length} published`}
-        actions={<Button leadingIcon={<Plus className="h-4 w-4" />}>{t("admin.newLesson")}</Button>}
+        subtitle={plural("plural.lessons", total)}
+        actions={
+          <Button leadingIcon={<Plus className="h-4 w-4" />} onClick={() => setEditor({ open: true, lesson: null })}>
+            {t("admin.newLesson")}
+          </Button>
+        }
       />
 
       <ContentToolbar
         query={query}
-        onQuery={setQuery}
+        onQuery={(v) => {
+          setQuery(v);
+          setPage(1);
+        }}
         status={status}
-        onStatus={setStatus}
+        onStatus={(v) => {
+          setStatus(v);
+          setPage(1);
+        }}
         subject={subject}
-        onSubject={setSubject}
+        onSubject={(v) => {
+          setSubject(v);
+          setPage(1);
+        }}
         age={age}
-        onAge={setAge}
+        onAge={(v) => {
+          setAge(v);
+          setPage(1);
+        }}
+        subjects={subjects.data ?? []}
         selectedCount={selected.length}
+        bulkPending={bulkStatusMutation.isPending || deleteMutation.isPending}
         onBulk={(action) => {
-          pushToast({ title: `${selected.length} lessons — ${action}`, tone: "brand", glyph: "📚" });
-          setSelected([]);
+          if (action === "delete") setPendingDelete(selected);
+          else bulkStatusMutation.mutate({ ids: selected, next: action === "publish" ? "PUBLISHED" : "ARCHIVED" });
         }}
       />
 
-      <DataTable
-        rows={rows}
-        columns={columns}
-        getRowId={(row) => row.id}
-        selectable
-        selectedIds={selected}
-        onSelectionChange={setSelected}
-        caption="Lessons"
-        emptyState={
-          <EmptyState
-            glyph="📚"
-            title={t("state.noLessonsTitle")}
-            body={t("state.noLessonsBody")}
-            action={<Button leadingIcon={<Plus className="h-4 w-4" />}>{t("admin.newLesson")}</Button>}
+      {lessons.isLoading ? (
+        <SkeletonTable rows={8} columns={6} />
+      ) : lessons.isError ? (
+        <ErrorState
+          title={t("state.errorTitle")}
+          body={t("state.errorBody")}
+          action={<Button onClick={() => void lessons.refetch()}>{t("common.retry")}</Button>}
+        />
+      ) : (
+        <>
+          <DataTable
+            rows={rows}
+            columns={columns}
+            getRowId={(row) => row.id}
+            selectable
+            selectedIds={selected}
+            onSelectionChange={setSelected}
+            pageSize={PAGE_SIZE}
+            caption={t("nav.lessons")}
+            emptyState={
+              <EmptyState
+                glyph="📚"
+                title={t("state.noLessonsTitle")}
+                body={t("state.noLessonsBody")}
+                action={
+                  <Button leadingIcon={<Plus className="h-4 w-4" />} onClick={() => setEditor({ open: true, lesson: null })}>
+                    {t("admin.newLesson")}
+                  </Button>
+                }
+              />
+            }
           />
-        }
+          {(lessons.data?.meta.totalPages ?? 1) > 1 ? (
+            <Pagination
+              className="mt-4"
+              page={page}
+              totalPages={lessons.data?.meta.totalPages ?? 1}
+              totalItems={total}
+              onChange={(next) => {
+                setPage(next);
+                setSelected([]);
+              }}
+            />
+          ) : null}
+        </>
+      )}
+
+      <LessonEditor
+        open={editor.open}
+        lesson={editor.lesson}
+        subjects={subjects.data ?? []}
+        onClose={() => setEditor({ open: false, lesson: null })}
       />
 
-      <LessonEditor lesson={editing} onClose={() => setEditing(null)} />
+      <Modal
+        open={pendingDelete !== null}
+        onClose={() => setPendingDelete(null)}
+        title={
+          pendingDelete && pendingDelete.length > 1
+            ? t("admin.deleteSelectedTitle", { count: pendingDelete.length })
+            : t("admin.deleteLessonTitle")
+        }
+        description={t("admin.deleteLessonBody")}
+        size="sm"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setPendingDelete(null)}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="danger"
+              loading={deleteMutation.isPending}
+              onClick={() => pendingDelete && deleteMutation.mutate(pendingDelete)}
+            >
+              {t("common.delete")}
+            </Button>
+          </>
+        }
+      >
+        <span />
+      </Modal>
     </div>
   );
 }
 
-function LessonEditor({ lesson, onClose }: { lesson: Lesson | null; onClose: () => void }) {
+interface LessonFormState {
+  subjectId: string;
+  ageCategory: string;
+  difficulty: string;
+  durationMinutes: number;
+  xpReward: number;
+  starReward: number;
+  glyph: string;
+  tone: string;
+  translations: Record<EditorLocale, { title: string; description: string }>;
+}
+
+const EMPTY_TRANSLATIONS: LessonFormState["translations"] = {
+  en: { title: "", description: "" },
+  ru: { title: "", description: "" },
+  uz: { title: "", description: "" },
+};
+
+/**
+ * Create/edit dialog for a lesson. Editing prefetches the lesson once per
+ * locale so all three translations round-trip intact — the API replaces the
+ * full translation set on save. The keyed inner form initialises its state on
+ * mount; the Modal unmounts it on close, so state can never leak between rows.
+ */
+function LessonEditor({
+  open,
+  lesson,
+  subjects,
+  onClose,
+}: {
+  open: boolean;
+  lesson: LessonDto | null;
+  subjects: SubjectDto[];
+  onClose: () => void;
+}) {
   const t = useT();
-  const pushToast = useAppStore((s) => s.pushToast);
+
+  const translations = useQuery({
+    queryKey: ["lessons", lesson?.id ?? "new", "editor-translations"],
+    enabled: open && Boolean(lesson),
+    queryFn: async () => {
+      const perLocale = await Promise.all(EDITOR_LOCALES.map((code) => fetchLesson(lesson!.id, undefined, code)));
+      return Object.fromEntries(
+        EDITOR_LOCALES.map((code, index) => [
+          code,
+          { title: perLocale[index].title, description: perLocale[index].description },
+        ]),
+      ) as LessonFormState["translations"];
+    },
+  });
+
+  const initial: LessonFormState | null = !open
+    ? null
+    : lesson
+      ? translations.data
+        ? {
+            subjectId: lesson.subjectId,
+            ageCategory: lesson.ageCategory,
+            difficulty: lesson.difficulty,
+            durationMinutes: lesson.durationMinutes,
+            xpReward: lesson.xpReward,
+            starReward: lesson.starReward,
+            glyph: lesson.glyph,
+            tone: lesson.tone,
+            translations: translations.data,
+          }
+        : null
+      : {
+          subjectId: subjects[0]?.id ?? "",
+          ageCategory: "AGE_3_4",
+          difficulty: "EASY",
+          durationMinutes: 5,
+          xpReward: 20,
+          starReward: 5,
+          glyph: "📘",
+          tone: "sky",
+          translations: EMPTY_TRANSLATIONS,
+        };
 
   return (
     <Modal
-      open={Boolean(lesson)}
+      open={open}
       onClose={onClose}
-      title={lesson ? `Edit: ${lesson.title}` : ""}
-      description="Changes go to review before publishing."
+      title={lesson ? `${t("admin.editLesson")}: ${lesson.title}` : t("admin.newLesson")}
+      description={t("admin.lessonEditorHint")}
       size="lg"
-      footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button
-            onClick={() => {
-              pushToast({ title: "Lesson saved", description: "Moved to review.", tone: "mint", glyph: "✅" });
-              onClose();
-            }}
-          >
-            {t("common.save")}
-          </Button>
-        </>
-      }
     >
-      {lesson ? (
+      {initial ? (
+        <LessonEditorForm
+          key={lesson?.id ?? `new-${subjects[0]?.id ?? ""}`}
+          initial={initial}
+          lessonId={lesson?.id}
+          subjects={subjects}
+          onClose={onClose}
+        />
+      ) : (
         <div className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block">
-              <span className="t-label mb-1.5 block text-content">Title</span>
-              <Input defaultValue={lesson.title} />
-            </label>
-            <label className="block">
-              <span className="t-label mb-1.5 block text-content">Subject</span>
-              <Select defaultValue={lesson.subjectId}>
-                {subjects.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="block">
-              <span className="t-label mb-1.5 block text-content">Age band</span>
-              <Select defaultValue={lesson.ageBand}>
-                {["1-2", "2-3", "3-4", "4-5", "5-6", "6-7"].map((band) => (
-                  <option key={band} value={band}>
-                    {band}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <label className="block">
-              <span className="t-label mb-1.5 block text-content">{t("common.status")}</span>
-              <Select defaultValue={lesson.status}>
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s[0].toUpperCase() + s.slice(1)}
-                  </option>
-                ))}
-              </Select>
-            </label>
-          </div>
-
-          <div className="rounded-lg border border-border bg-surface-muted p-4">
-            <p className="t-label text-content">Steps ({lesson.steps.length})</p>
-            <ol className="mt-2 space-y-1.5">
-              {lesson.steps.map((step, index) => (
-                <li key={step.id} className="t-caption flex items-center gap-2 text-content-secondary">
-                  <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-surface font-bold">
-                    {index + 1}
-                  </span>
-                  <span className="font-semibold uppercase tracking-wide text-content-tertiary">{step.kind}</span>
-                  <span className="truncate">{step.title}</span>
-                </li>
-              ))}
-            </ol>
-          </div>
+          <div className="shimmer h-11 rounded-sm" />
+          <div className="shimmer h-11 rounded-sm" />
+          <div className="shimmer h-24 rounded-sm" />
         </div>
-      ) : null}
+      )}
     </Modal>
+  );
+}
+
+function LessonEditorForm({
+  initial,
+  lessonId,
+  subjects,
+  onClose,
+}: {
+  initial: LessonFormState;
+  lessonId?: string;
+  subjects: SubjectDto[];
+  onClose: () => void;
+}) {
+  const t = useT();
+  const pushToast = useAppStore((s) => s.pushToast);
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<LessonFormState>(initial);
+  const [titleError, setTitleError] = useState(false);
+
+  const save = useMutation({
+    mutationFn: (state: LessonFormState) =>
+      upsertLesson(
+        {
+          subjectId: state.subjectId,
+          ageCategory: state.ageCategory,
+          difficulty: state.difficulty,
+          durationMinutes: state.durationMinutes,
+          xpReward: state.xpReward,
+          starReward: state.starReward,
+          glyph: state.glyph,
+          tone: state.tone,
+          translations: EDITOR_LOCALES.filter((code) => state.translations[code].title.trim().length > 0).map((code) => ({
+            locale: code,
+            title: state.translations[code].title.trim(),
+            description: state.translations[code].description.trim() || undefined,
+          })),
+        },
+        lessonId,
+      ),
+    onSuccess: () => {
+      pushToast({ title: t("admin.lessonSaved"), tone: "mint", glyph: "✅" });
+      void queryClient.invalidateQueries({ queryKey: ["lessons"] });
+      onClose();
+    },
+    onError: (error) => {
+      pushToast({
+        title: t("state.errorTitle"),
+        description: error instanceof ApiError ? error.message : undefined,
+        tone: "coral",
+        glyph: "⚠️",
+      });
+    },
+  });
+
+  function submit() {
+    if (form.translations.en.title.trim().length === 0 || form.subjectId === "") {
+      setTitleError(true);
+      return;
+    }
+    setTitleError(false);
+    save.mutate(form);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-border bg-surface-muted p-4">
+        <p className="t-label mb-3 text-content">{t("admin.translations")}</p>
+        <div className="space-y-4">
+          {EDITOR_LOCALES.map((code) => (
+            <div key={code} className="grid gap-3 sm:grid-cols-2">
+              <Field
+                label={`${localeLabel(code)} — ${t("admin.fieldTitle")}`}
+                required={code === "en"}
+                error={code === "en" && titleError && form.translations.en.title.trim().length === 0 ? t("admin.titleRequired") : undefined}
+              >
+                {({ id, invalid }) => (
+                  <Input
+                    id={id}
+                    invalid={invalid}
+                    value={form.translations[code].title}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        translations: {
+                          ...form.translations,
+                          [code]: { ...form.translations[code], title: e.target.value },
+                        },
+                      })
+                    }
+                  />
+                )}
+              </Field>
+              <Field label={`${localeLabel(code)} — ${t("admin.fieldDescription")}`}>
+                {({ id }) => (
+                  <Textarea
+                    id={id}
+                    rows={1}
+                    value={form.translations[code].description}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        translations: {
+                          ...form.translations,
+                          [code]: { ...form.translations[code], description: e.target.value },
+                        },
+                      })
+                    }
+                  />
+                )}
+              </Field>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label={t("admin.colSubject")}>
+          {({ id }) => (
+            <Select id={id} value={form.subjectId} onChange={(e) => setForm({ ...form, subjectId: e.target.value })}>
+              {subjects.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.glyph} {s.name}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Field label={t("filter.age")}>
+          {({ id }) => (
+            <Select id={id} value={form.ageCategory} onChange={(e) => setForm({ ...form, ageCategory: e.target.value })}>
+              {AGE_OPTIONS.map((band) => (
+                <option key={band.value} value={band.value}>
+                  {t(band.key)}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Field label={t("filter.difficulty")}>
+          {({ id }) => (
+            <Select id={id} value={form.difficulty} onChange={(e) => setForm({ ...form, difficulty: e.target.value })}>
+              {DIFFICULTY_OPTIONS.map((level) => (
+                <option key={level.value} value={level.value}>
+                  {t(level.key)}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Field label={t("admin.fieldDuration")}>
+          {({ id }) => (
+            <Input
+              id={id}
+              type="number"
+              min={1}
+              max={90}
+              value={form.durationMinutes}
+              onChange={(e) => setForm({ ...form, durationMinutes: Number(e.target.value) })}
+            />
+          )}
+        </Field>
+        <Field label={t("admin.fieldXp")}>
+          {({ id }) => (
+            <Input
+              id={id}
+              type="number"
+              min={0}
+              max={500}
+              value={form.xpReward}
+              onChange={(e) => setForm({ ...form, xpReward: Number(e.target.value) })}
+            />
+          )}
+        </Field>
+        <Field label={t("admin.fieldStars")}>
+          {({ id }) => (
+            <Input
+              id={id}
+              type="number"
+              min={0}
+              max={50}
+              value={form.starReward}
+              onChange={(e) => setForm({ ...form, starReward: Number(e.target.value) })}
+            />
+          )}
+        </Field>
+        <Field label={t("admin.fieldGlyph")}>
+          {({ id }) => <Input id={id} value={form.glyph} onChange={(e) => setForm({ ...form, glyph: e.target.value })} />}
+        </Field>
+        <Field label={t("admin.fieldTone")}>
+          {({ id }) => (
+            <Select id={id} value={form.tone} onChange={(e) => setForm({ ...form, tone: e.target.value })}>
+              {TONES.map((toneOption) => (
+                <option key={toneOption} value={toneOption}>
+                  {toneOption}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+      </div>
+
+      <div className="flex justify-end gap-3 border-t border-border pt-4">
+        <Button variant="ghost" onClick={onClose}>
+          {t("common.cancel")}
+        </Button>
+        <Button onClick={submit} loading={save.isPending}>
+          {t("common.save")}
+        </Button>
+      </div>
+    </div>
   );
 }
 
 /* --- Games --------------------------------------------------------------- */
 
-type GameRow = (typeof games)[number];
+type GameRow = Awaited<ReturnType<typeof fetchGames>>["items"][number];
 
 export function GamesAdminView() {
   const t = useT();
-  const { intlLocale } = useI18n();
-  const pushToast = useAppStore((s) => s.pushToast);
+  const { intlLocale, locale, plural } = useI18n();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [subject, setSubject] = useState("");
   const [age, setAge] = useState("");
-  const [selected, setSelected] = useState<string[]>([]);
+  const [page, setPage] = useState(1);
 
-  const rows = useMemo(
-    () =>
-      games.filter((game) => {
-        if (query && !game.title.toLowerCase().includes(query.toLowerCase())) return false;
-        if (status && game.status !== status) return false;
-        if (subject && game.subjectId !== subject) return false;
-        if (age && game.ageBand !== age) return false;
-        return true;
+  const search = useDebouncedValue(query, 300);
+
+  const subjects = useQuery({
+    queryKey: [...queryKeys.subjects, locale],
+    queryFn: () => fetchSubjects(locale),
+  });
+
+  const games = useQuery({
+    queryKey: [...queryKeys.games({ search, status, subject, age, page, purpose: "admin" }), locale],
+    queryFn: () =>
+      fetchGames({
+        search: search || undefined,
+        status: status || undefined,
+        subjectId: subject || undefined,
+        ageCategory: age || undefined,
+        page,
+        limit: PAGE_SIZE,
+        locale,
       }),
-    [query, status, subject, age],
-  );
+    placeholderData: (previous) => previous,
+  });
+
+  const rows = games.data?.items ?? [];
+  const total = games.data?.meta.total ?? 0;
 
   const columns: Array<Column<GameRow>> = [
     {
       id: "title",
-      header: "Game",
+      header: t("admin.colGame"),
       primary: true,
       sortValue: (row) => row.title,
       cell: (row) => (
         <div className="flex items-center gap-3">
-          <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-sm text-xl", toneStyles[row.tone].soft)} aria-hidden>
+          <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-sm text-xl", toneStyles[toneOf(row.tone)].soft)} aria-hidden>
             {row.glyph}
           </span>
           <div className="min-w-0">
@@ -379,25 +882,44 @@ export function GamesAdminView() {
         </div>
       ),
     },
-    { id: "subject", header: "Subject", secondary: true, cell: (row) => subjects.find((s) => s.id === row.subjectId)?.name },
-    { id: "age", header: "Age", width: "w-24", cell: (row) => <Badge tone="sky" size="sm">{row.ageBand}</Badge> },
+    { id: "subject", header: t("admin.colSubject"), secondary: true, cell: (row) => row.subject?.name ?? "" },
+    {
+      id: "age",
+      header: t("filter.age"),
+      width: "w-24",
+      cell: (row) => (
+        <Badge tone="sky" size="sm">
+          {t(AGE_KEY[row.ageCategory as keyof typeof AGE_KEY] ?? "age.band1_2")}
+        </Badge>
+      ),
+    },
     {
       id: "difficulty",
-      header: "Level",
+      header: t("filter.difficulty"),
       secondary: true,
-      cell: (row) => <DifficultyBadge difficulty={row.difficulty} label={t(DIFFICULTY_KEY[row.difficulty])} />,
+      cell: (row) => (
+        <DifficultyBadge
+          difficulty={difficultyProp(row.difficulty)}
+          label={t(DIFFICULTY_KEY[row.difficulty as keyof typeof DIFFICULTY_KEY] ?? "lesson.difficultyEasy")}
+        />
+      ),
     },
-    { id: "status", header: t("common.status"), width: "w-32", cell: (row) => <StatusBadge status={row.status} /> },
+    {
+      id: "status",
+      header: t("common.status"),
+      width: "w-32",
+      cell: (row) => <StatusBadge status={statusProp(row.status)} />,
+    },
     {
       id: "plays",
-      header: "Plays",
+      header: t("game.plays"),
       align: "right",
       sortValue: (row) => row.plays,
-      cell: (row) => <span className="tabular-nums text-content-secondary">{formatCompact(row.plays)}</span>,
+      cell: (row) => <span className="tabular-nums text-content-secondary">{formatCompact(row.plays, intlLocale)}</span>,
     },
     {
       id: "completion",
-      header: "Completion",
+      header: t("game.completion"),
       align: "right",
       sortValue: (row) => row.completionRate,
       cell: (row) => (
@@ -411,7 +933,7 @@ export function GamesAdminView() {
     },
     {
       id: "updated",
-      header: "Updated",
+      header: t("admin.colUpdated"),
       secondary: true,
       sortValue: (row) => row.updatedAt,
       cell: (row) => <span className="t-caption text-content-secondary">{formatDate(row.updatedAt, intlLocale)}</span>,
@@ -420,111 +942,432 @@ export function GamesAdminView() {
 
   return (
     <div className="mx-auto w-full max-w-[100rem]">
-      <PageHeading
-        title={t("nav.games")}
-        subtitle={`${games.length} game engines across ${subjects.length} subjects`}
-        actions={<Button leadingIcon={<Plus className="h-4 w-4" />}>{t("admin.newGame")}</Button>}
-      />
+      <PageHeading title={t("nav.games")} subtitle={plural("plural.games", total)} />
+
+      <div role="note" className="mb-4 flex items-start gap-3 rounded-xl border border-info/30 bg-info-soft px-4 py-3">
+        <Info className="mt-0.5 h-4 w-4 shrink-0 text-info" aria-hidden />
+        <p className="t-body-sm text-content">{t("admin.gamesReadOnly")}</p>
+      </div>
 
       <ContentToolbar
         query={query}
-        onQuery={setQuery}
-        status={status}
-        onStatus={setStatus}
-        subject={subject}
-        onSubject={setSubject}
-        age={age}
-        onAge={setAge}
-        selectedCount={selected.length}
-        onBulk={(action) => {
-          pushToast({ title: `${selected.length} games — ${action}`, tone: "brand", glyph: "🎮" });
-          setSelected([]);
+        onQuery={(v) => {
+          setQuery(v);
+          setPage(1);
         }}
+        status={status}
+        onStatus={(v) => {
+          setStatus(v);
+          setPage(1);
+        }}
+        subject={subject}
+        onSubject={(v) => {
+          setSubject(v);
+          setPage(1);
+        }}
+        age={age}
+        onAge={(v) => {
+          setAge(v);
+          setPage(1);
+        }}
+        subjects={subjects.data ?? []}
+        selectedCount={0}
       />
 
-      <DataTable
-        rows={rows}
-        columns={columns}
-        getRowId={(row) => row.id}
-        selectable
-        selectedIds={selected}
-        onSelectionChange={setSelected}
-        caption="Games"
-        emptyState={<EmptyState glyph="🎮" title={t("state.noResultsTitle")} body={t("state.noResultsBody")} />}
-      />
+      {games.isLoading ? (
+        <SkeletonTable rows={6} columns={7} />
+      ) : games.isError ? (
+        <ErrorState
+          title={t("state.errorTitle")}
+          body={t("state.errorBody")}
+          action={<Button onClick={() => void games.refetch()}>{t("common.retry")}</Button>}
+        />
+      ) : (
+        <>
+          <DataTable
+            rows={rows}
+            columns={columns}
+            getRowId={(row) => row.id}
+            pageSize={PAGE_SIZE}
+            caption={t("nav.games")}
+            emptyState={<EmptyState glyph="🎮" title={t("state.noResultsTitle")} body={t("state.noResultsBody")} />}
+          />
+          {(games.data?.meta.totalPages ?? 1) > 1 ? (
+            <Pagination
+              className="mt-4"
+              page={page}
+              totalPages={games.data?.meta.totalPages ?? 1}
+              totalItems={total}
+              onChange={setPage}
+            />
+          ) : null}
+        </>
+      )}
     </div>
   );
 }
 
 /* --- Subjects & categories ----------------------------------------------- */
 
+interface SubjectFormState {
+  slug: string;
+  glyph: string;
+  tone: string;
+  order: number;
+  translations: Record<EditorLocale, { title: string; description: string }>;
+}
+
 export function SubjectsAdminView() {
   const t = useT();
+  const { locale, plural } = useI18n();
+  const [editor, setEditor] = useState<{ open: boolean; slug: string | null }>({ open: false, slug: null });
+
+  const subjects = useQuery({
+    queryKey: [...queryKeys.subjects, locale],
+    queryFn: () => fetchSubjects(locale),
+  });
+
+  /** All three locales at once, so editing round-trips every translation. */
+  const allLocales = useQuery({
+    queryKey: [...queryKeys.subjects, "editor-locales"],
+    enabled: editor.open,
+    queryFn: async () => {
+      const [en, ru, uz] = await Promise.all(EDITOR_LOCALES.map((code) => fetchSubjects(code)));
+      return { en, ru, uz };
+    },
+  });
+
+  const initial: SubjectFormState | null = !editor.open
+    ? null
+    : editor.slug
+      ? allLocales.data
+        ? (() => {
+            const base = allLocales.data.en.find((s) => s.slug === editor.slug);
+            if (!base) return null;
+            return {
+              slug: base.slug,
+              glyph: base.glyph,
+              tone: base.tone,
+              order: base.order,
+              translations: Object.fromEntries(
+                EDITOR_LOCALES.map((code) => {
+                  const match = allLocales.data[code].find((s) => s.slug === editor.slug);
+                  return [code, { title: match?.name ?? "", description: match?.description ?? "" }];
+                }),
+              ) as SubjectFormState["translations"],
+            };
+          })()
+        : null
+      : { slug: "", glyph: "📘", tone: "sky", order: 0, translations: EMPTY_TRANSLATIONS };
 
   return (
     <div className="mx-auto w-full max-w-[90rem]">
       <PageHeading
         title={t("nav.subjects")}
-        subtitle="Subjects group lessons and drive the colour of every card in the product."
-        actions={<Button leadingIcon={<Plus className="h-4 w-4" />}>New subject</Button>}
+        subtitle={t("admin.subjectsSubtitle")}
+        actions={
+          <Button leadingIcon={<Plus className="h-4 w-4" />} onClick={() => setEditor({ open: true, slug: null })}>
+            {t("admin.newSubject")}
+          </Button>
+        }
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-        {subjects.map((subject) => (
-          <Card key={subject.id} interactive>
-            <CardBody className="pt-5">
-              <div className="flex items-start gap-3">
-                <span className={cn("grid h-14 w-14 shrink-0 place-items-center rounded-lg text-3xl", toneStyles[subject.tone].soft)} aria-hidden>
-                  {subject.glyph}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <h3 className="t-h4 truncate text-content">{subject.name}</h3>
-                  <p className="t-caption text-content-secondary">{subject.lessonCount} lessons</p>
+      {subjects.isLoading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+          {Array.from({ length: 8 }, (_, i) => (
+            <div key={i} className="shimmer h-44 rounded-xl" />
+          ))}
+        </div>
+      ) : subjects.isError ? (
+        <ErrorState
+          title={t("state.errorTitle")}
+          body={t("state.errorBody")}
+          action={<Button onClick={() => void subjects.refetch()}>{t("common.retry")}</Button>}
+        />
+      ) : (subjects.data?.length ?? 0) === 0 ? (
+        <EmptyState glyph="🎨" title={t("state.emptyTitle")} body={t("state.emptyBody")} />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+          {(subjects.data ?? []).map((subject) => (
+            <Card key={subject.id} interactive>
+              <CardBody className="pt-5">
+                <div className="flex items-start gap-3">
+                  <span
+                    className={cn("grid h-14 w-14 shrink-0 place-items-center rounded-lg text-3xl", toneStyles[toneOf(subject.tone)].soft)}
+                    aria-hidden
+                  >
+                    {subject.glyph}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="t-h4 truncate text-content">{subject.name}</h3>
+                    <p className="t-caption text-content-secondary">{plural("plural.lessons", subject.lessonCount)}</p>
+                  </div>
+                  <IconButton
+                    label={`${t("common.edit")} ${subject.name}`}
+                    size="icon-sm"
+                    onClick={() => setEditor({ open: true, slug: subject.slug })}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </IconButton>
                 </div>
-                <IconButton label={`${t("common.edit")} ${subject.name}`} size="icon-sm">
-                  <Pencil className="h-4 w-4" />
-                </IconButton>
-              </div>
-              <p className="t-caption mt-3 text-content-secondary">{subject.description}</p>
-              <div className="mt-3 flex items-center gap-2">
-                <span className={cn("h-3 w-3 rounded-full", toneStyles[subject.tone].solid)} aria-hidden />
-                <span className="t-caption font-semibold text-content-secondary">Tone: {subject.tone}</span>
-              </div>
-            </CardBody>
-          </Card>
-        ))}
+                <p className="t-caption mt-3 text-content-secondary">{subject.description}</p>
+                <div className="mt-3 flex items-center gap-2">
+                  <span className={cn("h-3 w-3 rounded-full", toneStyles[toneOf(subject.tone)].solid)} aria-hidden />
+                  <span className="t-caption font-semibold text-content-secondary">
+                    {t("admin.tone")}: {subject.tone}
+                  </span>
+                </div>
+              </CardBody>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <Modal
+        open={editor.open}
+        onClose={() => setEditor({ open: false, slug: null })}
+        title={editor.slug ? t("admin.editSubject") : t("admin.newSubject")}
+        size="lg"
+      >
+        {initial ? (
+          <SubjectEditorForm
+            key={editor.slug ?? "new"}
+            initial={initial}
+            isEdit={Boolean(editor.slug)}
+            onClose={() => setEditor({ open: false, slug: null })}
+          />
+        ) : (
+          <div className="space-y-4">
+            <div className="shimmer h-11 rounded-sm" />
+            <div className="shimmer h-11 rounded-sm" />
+            <div className="shimmer h-24 rounded-sm" />
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+function SubjectEditorForm({
+  initial,
+  isEdit,
+  onClose,
+}: {
+  initial: SubjectFormState;
+  isEdit: boolean;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const pushToast = useAppStore((s) => s.pushToast);
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<SubjectFormState>(initial);
+  const [formError, setFormError] = useState(false);
+
+  const save = useMutation({
+    mutationFn: (state: SubjectFormState) =>
+      upsertSubject({
+        slug: state.slug.trim(),
+        glyph: state.glyph,
+        tone: state.tone,
+        order: state.order,
+        translations: EDITOR_LOCALES.filter((code) => state.translations[code].title.trim().length > 0).map((code) => ({
+          locale: code,
+          title: state.translations[code].title.trim(),
+          description: state.translations[code].description.trim() || undefined,
+        })),
+      }),
+    onSuccess: () => {
+      pushToast({ title: t("admin.subjectSaved"), tone: "mint", glyph: "✅" });
+      void queryClient.invalidateQueries({ queryKey: ["subjects"] });
+      onClose();
+    },
+    onError: (error) => {
+      pushToast({
+        title: t("state.errorTitle"),
+        description: error instanceof ApiError ? error.message : undefined,
+        tone: "coral",
+        glyph: "⚠️",
+      });
+    },
+  });
+
+  function submit() {
+    if (form.slug.trim().length === 0 || form.translations.en.title.trim().length === 0) {
+      setFormError(true);
+      return;
+    }
+    setFormError(false);
+    save.mutate(form);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field
+          label={t("admin.fieldSlug")}
+          required
+          hint={isEdit ? t("admin.slugLockedHint") : undefined}
+          error={formError && form.slug.trim().length === 0 ? t("common.required") : undefined}
+        >
+          {({ id, invalid }) => (
+            <Input
+              id={id}
+              invalid={invalid}
+              value={form.slug}
+              disabled={isEdit}
+              onChange={(e) => setForm({ ...form, slug: e.target.value })}
+            />
+          )}
+        </Field>
+        <Field label={t("admin.fieldGlyph")}>
+          {({ id }) => <Input id={id} value={form.glyph} onChange={(e) => setForm({ ...form, glyph: e.target.value })} />}
+        </Field>
+        <Field label={t("admin.fieldTone")}>
+          {({ id }) => (
+            <Select id={id} value={form.tone} onChange={(e) => setForm({ ...form, tone: e.target.value })}>
+              {TONES.map((toneOption) => (
+                <option key={toneOption} value={toneOption}>
+                  {toneOption}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Field label={t("admin.fieldOrder")}>
+          {({ id }) => (
+            <Input
+              id={id}
+              type="number"
+              min={0}
+              value={form.order}
+              onChange={(e) => setForm({ ...form, order: Number(e.target.value) })}
+            />
+          )}
+        </Field>
+      </div>
+
+      <div className="rounded-lg border border-border bg-surface-muted p-4">
+        <p className="t-label mb-3 text-content">{t("admin.translations")}</p>
+        <div className="space-y-4">
+          {EDITOR_LOCALES.map((code) => (
+            <div key={code} className="grid gap-3 sm:grid-cols-2">
+              <Field
+                label={`${localeLabel(code)} — ${t("admin.fieldTitle")}`}
+                required={code === "en"}
+                error={code === "en" && formError && form.translations.en.title.trim().length === 0 ? t("admin.titleRequired") : undefined}
+              >
+                {({ id, invalid }) => (
+                  <Input
+                    id={id}
+                    invalid={invalid}
+                    value={form.translations[code].title}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        translations: {
+                          ...form.translations,
+                          [code]: { ...form.translations[code], title: e.target.value },
+                        },
+                      })
+                    }
+                  />
+                )}
+              </Field>
+              <Field label={`${localeLabel(code)} — ${t("admin.fieldDescription")}`}>
+                {({ id }) => (
+                  <Textarea
+                    id={id}
+                    rows={1}
+                    value={form.translations[code].description}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        translations: {
+                          ...form.translations,
+                          [code]: { ...form.translations[code], description: e.target.value },
+                        },
+                      })
+                    }
+                  />
+                )}
+              </Field>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-3 border-t border-border pt-4">
+        <Button variant="ghost" onClick={onClose}>
+          {t("common.cancel")}
+        </Button>
+        <Button onClick={submit} loading={save.isPending}>
+          {t("common.save")}
+        </Button>
       </div>
     </div>
   );
 }
 
-type CategoryRow = (typeof categories)[number];
+type CategoryRow = Awaited<ReturnType<typeof fetchCategories>>["items"][number];
+
+interface CategoryFormState {
+  slug: string;
+  subjectId: string;
+  status: string;
+  translations: Record<EditorLocale, string>;
+}
 
 export function CategoriesAdminView() {
   const t = useT();
-  const { intlLocale } = useI18n();
-  const [selected, setSelected] = useState<string[]>([]);
+  const { intlLocale, locale } = useI18n();
+  const [page, setPage] = useState(1);
+  const [creatorOpen, setCreatorOpen] = useState(false);
+
+  const subjects = useQuery({
+    queryKey: [...queryKeys.subjects, locale],
+    queryFn: () => fetchSubjects(locale),
+  });
+
+  const categories = useQuery({
+    queryKey: queryKeys.categories({ page }),
+    queryFn: () => fetchCategories({ page, limit: PAGE_SIZE }),
+    placeholderData: (previous) => previous,
+  });
+
+  const rows = categories.data?.items ?? [];
 
   const columns: Array<Column<CategoryRow>> = [
-    { id: "name", header: "Category", primary: true, sortValue: (row) => row.name, cell: (row) => <span className="font-semibold text-content">{row.name}</span> },
+    {
+      id: "name",
+      header: t("admin.colCategory"),
+      primary: true,
+      sortValue: (row) => row.name,
+      cell: (row) => <span className="font-semibold text-content">{row.name}</span>,
+    },
     {
       id: "subject",
-      header: "Subject",
+      header: t("admin.colSubject"),
       cell: (row) => {
-        const subject = subjects.find((s) => s.id === row.subjectId);
+        const subject = (subjects.data ?? []).find((s) => s.id === row.subjectId);
         return subject ? (
           <span className="inline-flex items-center gap-1.5">
-            <span className={cn("h-2 w-2 rounded-full", toneStyles[subject.tone].solid)} aria-hidden />
+            <span className={cn("h-2 w-2 rounded-full", toneStyles[toneOf(subject.tone)].solid)} aria-hidden />
             {subject.name}
           </span>
         ) : null;
       },
     },
-    { id: "items", header: "Items", align: "right", sortValue: (row) => row.itemCount, cell: (row) => <span className="tabular-nums">{row.itemCount}</span> },
-    { id: "status", header: t("common.status"), cell: (row) => <StatusBadge status={row.status} /> },
+    {
+      id: "items",
+      header: t("admin.colItems"),
+      align: "right",
+      sortValue: (row) => row.itemCount,
+      cell: (row) => <span className="tabular-nums">{row.itemCount}</span>,
+    },
+    { id: "status", header: t("common.status"), cell: (row) => <StatusBadge status={statusProp(row.status)} /> },
     {
       id: "updated",
-      header: "Updated",
+      header: t("admin.colUpdated"),
       secondary: true,
       sortValue: (row) => row.updatedAt,
       cell: (row) => <span className="t-caption text-content-secondary">{formatDate(row.updatedAt, intlLocale)}</span>,
@@ -535,19 +1378,169 @@ export function CategoriesAdminView() {
     <div className="mx-auto w-full max-w-[90rem]">
       <PageHeading
         title={t("nav.categories")}
-        subtitle="Categories organise content inside a subject."
-        actions={<Button leadingIcon={<Plus className="h-4 w-4" />}>New category</Button>}
+        subtitle={t("admin.categoriesSubtitle")}
+        actions={
+          <Button leadingIcon={<Plus className="h-4 w-4" />} onClick={() => setCreatorOpen(true)}>
+            {t("admin.newCategory")}
+          </Button>
+        }
       />
-      <DataTable
-        rows={categories}
-        columns={columns}
-        getRowId={(row) => row.id}
-        selectable
-        selectedIds={selected}
-        onSelectionChange={setSelected}
-        caption="Categories"
-        emptyState={<EmptyState glyph="🗂️" title={t("state.emptyTitle")} body={t("state.emptyBody")} />}
-      />
+
+      {categories.isLoading ? (
+        <SkeletonTable rows={6} columns={5} />
+      ) : categories.isError ? (
+        <ErrorState
+          title={t("state.errorTitle")}
+          body={t("state.errorBody")}
+          action={<Button onClick={() => void categories.refetch()}>{t("common.retry")}</Button>}
+        />
+      ) : (
+        <>
+          <DataTable
+            rows={rows}
+            columns={columns}
+            getRowId={(row) => row.id}
+            pageSize={PAGE_SIZE}
+            caption={t("nav.categories")}
+            emptyState={<EmptyState glyph="🗂️" title={t("state.emptyTitle")} body={t("state.emptyBody")} />}
+          />
+          {(categories.data?.meta.totalPages ?? 1) > 1 ? (
+            <Pagination
+              className="mt-4"
+              page={page}
+              totalPages={categories.data?.meta.totalPages ?? 1}
+              totalItems={categories.data?.meta.total}
+              onChange={setPage}
+            />
+          ) : null}
+        </>
+      )}
+
+      <Modal open={creatorOpen} onClose={() => setCreatorOpen(false)} title={t("admin.newCategory")} size="md">
+        <CategoryCreatorForm
+          key={`new-${subjects.data?.[0]?.id ?? ""}`}
+          subjects={subjects.data ?? []}
+          onClose={() => setCreatorOpen(false)}
+        />
+      </Modal>
+    </div>
+  );
+}
+
+function CategoryCreatorForm({ subjects, onClose }: { subjects: SubjectDto[]; onClose: () => void }) {
+  const t = useT();
+  const pushToast = useAppStore((s) => s.pushToast);
+  const queryClient = useQueryClient();
+  const [form, setForm] = useState<CategoryFormState>({
+    slug: "",
+    subjectId: subjects[0]?.id ?? "",
+    status: "DRAFT",
+    translations: { en: "", ru: "", uz: "" },
+  });
+  const [formError, setFormError] = useState(false);
+
+  const save = useMutation({
+    mutationFn: (state: CategoryFormState) =>
+      upsertCategory({
+        slug: state.slug.trim(),
+        subjectId: state.subjectId,
+        status: state.status,
+        translations: EDITOR_LOCALES.filter((code) => state.translations[code].trim().length > 0).map((code) => ({
+          locale: code,
+          title: state.translations[code].trim(),
+        })),
+      }),
+    onSuccess: () => {
+      pushToast({ title: t("admin.categorySaved"), tone: "mint", glyph: "✅" });
+      void queryClient.invalidateQueries({ queryKey: ["categories"] });
+      onClose();
+    },
+    onError: (error) => {
+      pushToast({
+        title: t("state.errorTitle"),
+        description: error instanceof ApiError ? error.message : undefined,
+        tone: "coral",
+        glyph: "⚠️",
+      });
+    },
+  });
+
+  function submit() {
+    if (form.slug.trim().length === 0 || form.subjectId === "" || form.translations.en.trim().length === 0) {
+      setFormError(true);
+      return;
+    }
+    setFormError(false);
+    save.mutate(form);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field
+          label={t("admin.fieldSlug")}
+          required
+          error={formError && form.slug.trim().length === 0 ? t("common.required") : undefined}
+        >
+          {({ id, invalid }) => (
+            <Input id={id} invalid={invalid} value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
+          )}
+        </Field>
+        <Field label={t("admin.colSubject")}>
+          {({ id }) => (
+            <Select id={id} value={form.subjectId} onChange={(e) => setForm({ ...form, subjectId: e.target.value })}>
+              {subjects.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.glyph} {s.name}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+        <Field label={t("common.status")} className="sm:col-span-2">
+          {({ id }) => (
+            <Select id={id} value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+              {STATUS_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {t(option.key)}
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+      </div>
+
+      <div className="rounded-lg border border-border bg-surface-muted p-4">
+        <p className="t-label mb-3 text-content">{t("admin.translations")}</p>
+        <div className="space-y-3">
+          {EDITOR_LOCALES.map((code) => (
+            <Field
+              key={code}
+              label={`${localeLabel(code)} — ${t("admin.fieldTitle")}`}
+              required={code === "en"}
+              error={code === "en" && formError && form.translations.en.trim().length === 0 ? t("admin.titleRequired") : undefined}
+            >
+              {({ id, invalid }) => (
+                <Input
+                  id={id}
+                  invalid={invalid}
+                  value={form.translations[code]}
+                  onChange={(e) => setForm({ ...form, translations: { ...form.translations, [code]: e.target.value } })}
+                />
+              )}
+            </Field>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-3 border-t border-border pt-4">
+        <Button variant="ghost" onClick={onClose}>
+          {t("common.cancel")}
+        </Button>
+        <Button onClick={submit} loading={save.isPending}>
+          {t("common.save")}
+        </Button>
+      </div>
     </div>
   );
 }

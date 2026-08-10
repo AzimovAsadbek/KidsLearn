@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/i18n/provider";
 import { toneStyles } from "@/lib/tone";
 import type { MultiSeries } from "@/types";
 import { geometry, nearestIndex, niceMax, pointerToSvgX, smoothPath, ticksFor } from "./primitives";
@@ -25,6 +26,7 @@ export function MultiLineChart({
   /** Scale every series to its own maximum so small series stay readable. */
   normalise?: boolean;
 }) {
+  const { intlLocale } = useI18n();
   const [active, setActive] = useState<number | null>(null);
   const labels = series[0]?.points.map((p) => p.label) ?? [];
   const geo = geometry(VIEW_W, VIEW_H, { left: 40, right: 16, top: 20, bottom: 34 });
@@ -128,7 +130,7 @@ export function MultiLineChart({
               {s.name}
               {active !== null ? (
                 <span className="ml-1 font-bold text-content tabular-nums">
-                  {s.points[active]?.value.toLocaleString()}
+                  {s.points[active]?.value.toLocaleString(intlLocale)}
                 </span>
               ) : null}
             </span>

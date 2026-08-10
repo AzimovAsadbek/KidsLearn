@@ -7,6 +7,7 @@ import type {
   AdminMetricsDto,
   AiJobDto,
   AiProviderStatusDto,
+  AuditLogDto,
   CertificateDto,
   ChildDto,
   ChildProgressDto,
@@ -56,6 +57,11 @@ export const queryKeys = {
   adminMetrics: ["admin", "metrics"] as const,
   adminAnalytics: ["admin", "analytics"] as const,
   adminUsers: (params: Record<string, unknown>) => ["admin", "users", params] as const,
+  adminAchievements: ["admin", "achievements"] as const,
+  adminRewards: ["admin", "rewards"] as const,
+  adminCertificates: (params: Record<string, unknown>) => ["admin", "certificates", params] as const,
+  auditLog: (params: Record<string, unknown>) => ["admin", "audit-log", params] as const,
+  categories: (params: Record<string, unknown>) => ["categories", params] as const,
   media: (params: Record<string, unknown>) => ["media", params] as const,
   aiStatus: ["ai", "status"] as const,
   aiJobs: (params: Record<string, unknown>) => ["ai", "jobs", params] as const,
@@ -64,6 +70,8 @@ export const queryKeys = {
 /* --- Platform ------------------------------------------------------------- */
 
 export const fetchFeatureFlags = () => api.get<FeatureFlagsDto>("/feature-flags");
+export const updateFeatureFlag = (key: string, enabled: boolean) =>
+  api.patch<FeatureFlagsDto>(`/feature-flags/${key}`, { enabled });
 export const fetchSubjects = (locale?: string) => api.get<SubjectDto[]>("/subjects", { query: { locale } });
 
 /* --- Children ------------------------------------------------------------- */
@@ -171,23 +179,27 @@ export const fetchPushStatus = () =>
 
 /* --- Admin ---------------------------------------------------------------- */
 
+export interface AdminUserRow {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  role: string;
+  status: string;
+  childrenCount: number;
+  avatarGlyph: string;
+  avatarTone: string;
+  createdAt: string;
+  lastSeenAt: string | null;
+}
+
 export const fetchAdminMetrics = () => api.get<AdminMetricsDto>("/admin/metrics");
 export const fetchAdminAnalytics = () => api.get<AdminAnalyticsDto>("/admin/analytics");
 export const fetchAdminUsers = (params: Record<string, string | number | undefined>) =>
-  api.getPage<{
-    id: string;
-    name: string;
-    email: string;
-    phone: string | null;
-    role: string;
-    status: string;
-    childrenCount: number;
-    avatarGlyph: string;
-    avatarTone: string;
-    createdAt: string;
-    lastSeenAt: string | null;
-  }>("/admin/users", { query: params });
-export const updateAdminUser = (id: string, body: unknown) => api.patch(`/admin/users/${id}`, body);
+  api.getPage<AdminUserRow>("/admin/users", { query: params });
+export const updateAdminUser = (id: string, body: unknown) => api.patch<AdminUserRow>(`/admin/users/${id}`, body);
+export const fetchAuditLog = (params: Record<string, string | number | undefined>) =>
+  api.getPage<AuditLogDto>("/admin/audit-log", { query: params });
 export const fetchMedia = (params: Record<string, string | number | undefined>) =>
   api.getPage<MediaDto>("/media", { query: params });
 

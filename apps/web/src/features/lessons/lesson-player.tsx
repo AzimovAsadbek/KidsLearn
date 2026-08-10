@@ -68,12 +68,14 @@ export function LessonPlayer({ lesson }: { lesson: LessonDto }) {
   const percent = Math.round(((index + (feedback === "correct" ? 1 : 0)) / Math.max(1, blocks.length)) * 100);
 
   const submitMutation = useMutation({
-    mutationFn: () => {
+    // Duration is measured in the event handler (goNext) — the mutation itself
+    // stays a pure payload → request mapping.
+    mutationFn: (payload: { durationSeconds: number }) => {
       clientAttemptId.current ??= crypto.randomUUID();
       return completeLesson(lesson.id, {
         clientAttemptId: clientAttemptId.current,
         childId: selectedChild!.id,
-        durationSeconds: Math.max(1, Math.round((Date.now() - (startedAt.current || Date.now())) / 1000)),
+        durationSeconds: payload.durationSeconds,
         answers: answers.current,
       });
     },
@@ -99,7 +101,10 @@ export function LessonPlayer({ lesson }: { lesson: LessonDto }) {
 
   const goNext = useCallback(() => {
     if (isLast) {
-      if (!submitMutation.isPending && !result) submitMutation.mutate();
+      if (!submitMutation.isPending && !result) {
+        const elapsed = Math.max(1, Math.round((Date.now() - (startedAt.current || Date.now())) / 1000));
+        submitMutation.mutate({ durationSeconds: elapsed });
+      }
       return;
     }
     const nextIndex = index + 1;

@@ -1,165 +1,188 @@
 "use client";
 
 import { useState } from "react";
-import { Download } from "lucide-react";
-import { cn, formatCompact, formatDuration, formatNumber } from "@/lib/utils";
-import { toneStyles } from "@/lib/tone";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { cn, formatCompact, formatDuration, formatNumber, formatRelativeTime } from "@/lib/utils";
+import { toneStyles, TONES, type Tone } from "@/lib/tone";
 import { useI18n, useT } from "@/i18n/provider";
-import { advancedMetrics } from "@/data/admin";
+import type { AuditLogDto, FeatureFlagKey, FeatureFlagsDto } from "@kidslearn/types";
+import { ApiError } from "@/lib/api/client";
 import {
-  dailyActivity,
-  lessonCompletionTrend,
-  platformGrowth,
-  retentionCohort,
-  subjectShare,
-  userGrowthWeekly,
-} from "@/data/analytics";
-import { getSubject } from "@/data/subjects";
-import { lessons } from "@/data/lessons";
-import { games } from "@/data/games";
-import { LOCALES } from "@/i18n/config";
+  fetchAdminAnalytics,
+  fetchAuditLog,
+  fetchFeatureFlags,
+  queryKeys,
+  updateFeatureFlag,
+} from "@/lib/api/queries";
 import { useAppStore } from "@/store/app-store";
 import { PageHeading } from "@/components/layout/app-shell";
-import { Card, CardBody, CardFooter, CardHeader, ChartCard } from "@/components/ui/card";
+import { Card, CardBody, CardHeader, ChartCard } from "@/components/ui/card";
 import { MiniStat } from "@/components/ui/stat-card";
-import { Tabs } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Field, Input, Select, Switch } from "@/components/ui/field";
+import { Switch } from "@/components/ui/field";
 import { AreaChart } from "@/components/charts/area-chart";
 import { BarChart } from "@/components/charts/bar-chart";
 import { DonutChart } from "@/components/charts/donut-chart";
-import { MultiLineChart } from "@/components/charts/line-chart";
+import { DataTable, Pagination, type Column } from "@/components/ui/data-table";
+import { EmptyState, ErrorState, InlineError, SkeletonTable } from "@/components/ui/states";
+
+function toneOf(tone: string): Tone {
+  return (TONES as readonly string[]).includes(tone) ? (tone as Tone) : "brand";
+}
 
 /* --- Advanced analytics --------------------------------------------------- */
 
 export function AdminAnalyticsView() {
   const t = useT();
   const { intlLocale } = useI18n();
-  const [period, setPeriod] = useState<"daily" | "weekly" | "monthly" | "yearly">("weekly");
 
-  const topLessons = [...lessons].sort((a, b) => b.completions - a.completions).slice(0, 5);
-  const topGames = [...games].sort((a, b) => b.plays - a.plays).slice(0, 5);
+  const analytics = useQuery({ queryKey: queryKeys.adminAnalytics, queryFn: fetchAdminAnalytics });
+  const data = analytics.data;
+
+  const miniStats = data
+    ? ([
+        { id: "dau", label: t("admin.dau"), glyph: "⚡", tone: "brand", value: formatNumber(data.dau, intlLocale) },
+        { id: "wau", label: t("admin.wau"), glyph: "📅", tone: "sky", value: formatNumber(data.wau, intlLocale) },
+        { id: "mau", label: t("admin.mau"), glyph: "🗓️", tone: "grape", value: formatNumber(data.mau, intlLocale) },
+        { id: "lessons", label: t("admin.lessonCompletionRate"), glyph: "✅", tone: "mint", value: `${data.lessonCompletionRate}%` },
+        { id: "games", label: t("admin.gameCompletionRate"), glyph: "🎮", tone: "sun", value: `${data.gameCompletionRate}%` },
+        {
+          id: "session",
+          label: t("admin.avgSession"),
+          glyph: "⏱️",
+          tone: "lagoon",
+          value: formatDuration(Math.round(data.averageSessionSeconds / 60)),
+        },
+      ] as const)
+    : [];
+
+  if (analytics.isError) {
+    return (
+      <div className="mx-auto w-full max-w-[100rem] space-y-6">
+        <PageHeading title={t("nav.statistics")} subtitle={t("admin.analyticsSubtitle")} />
+        <ErrorState
+          title={t("state.errorTitle")}
+          body={t("state.errorBody")}
+          action={<Button onClick={() => void analytics.refetch()}>{t("common.retry")}</Button>}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-[100rem] space-y-6">
-      <PageHeading
-        title={t("nav.statistics")}
-        subtitle="Engagement, retention and content performance across the platform."
-        actions={
-          <Button variant="secondary" leadingIcon={<Download className="h-4 w-4" />}>
-            Export CSV
-          </Button>
-        }
-      />
+      <PageHeading title={t("nav.statistics")} subtitle={t("admin.analyticsSubtitle")} />
 
-      <Tabs
-        variant="segmented"
-        ariaLabel="Period"
-        value={period}
-        onChange={setPeriod}
-        items={[
-          { id: "daily", label: t("common.daily") },
-          { id: "weekly", label: t("common.weekly") },
-          { id: "monthly", label: t("common.monthly") },
-          { id: "yearly", label: t("common.yearly") },
-        ]}
-      />
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {advancedMetrics.map((metric) => (
-          <MiniStat
-            key={metric.id}
-            tone={metric.tone}
-            glyph={metric.glyph}
-            label={metric.label}
-            delta={metric.deltaPercent}
-            value={
-              metric.format === "percent"
-                ? `${metric.value}%`
-                : metric.format === "duration"
-                  ? formatDuration(metric.value)
-                  : formatNumber(metric.value, intlLocale)
-            }
-          />
-        ))}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {analytics.isLoading
+          ? Array.from({ length: 6 }, (_, i) => <div key={i} className="shimmer h-20 rounded-lg" />)
+          : miniStats.map((metric) => (
+              <MiniStat key={metric.id} tone={metric.tone} glyph={metric.glyph} label={metric.label} value={metric.value} />
+            ))}
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
-        <ChartCard title="Platform growth" subtitle="Users, lessons and games">
-          <MultiLineChart series={platformGrowth} ariaLabel="Platform growth" />
+        <ChartCard title={t("admin.platformStatistics")} subtitle={t("admin.dailyActivitySubtitle")}>
+          {analytics.isLoading ? (
+            <div className="shimmer h-56 rounded-lg" />
+          ) : (data?.dailyActivity.length ?? 0) === 0 ? (
+            <EmptyState compact glyph="📈" title={t("admin.noDataTitle")} body={t("admin.noDataBody")} />
+          ) : (
+            <AreaChart points={data?.dailyActivity ?? []} tone="brand" ariaLabel={t("admin.platformStatistics")} />
+          )}
         </ChartCard>
 
-        <ChartCard title="Retention" subtitle="Share of learners still active">
-          <AreaChart points={retentionCohort} tone="lagoon" valueSuffix="%" ariaLabel="Retention curve" />
-        </ChartCard>
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-3">
-        <ChartCard title="Daily activity" subtitle="Sessions per day">
-          <AreaChart points={dailyActivity} tone="brand" ariaLabel="Sessions per day" />
-        </ChartCard>
-        <ChartCard title="Lesson completion" subtitle="Percent finished">
-          <AreaChart points={lessonCompletionTrend} tone="mint" valueSuffix="%" ariaLabel="Lesson completion rate" />
-        </ChartCard>
-        <ChartCard title="New users" subtitle="By week">
-          <BarChart points={userGrowthWeekly} tone="grape" ariaLabel="New users" />
+        <ChartCard title={t("admin.userGrowth")} subtitle={t("admin.userGrowthSubtitle")}>
+          {analytics.isLoading ? (
+            <div className="shimmer h-56 rounded-lg" />
+          ) : (data?.userGrowth.length ?? 0) === 0 ? (
+            <EmptyState compact glyph="📊" title={t("admin.noDataTitle")} body={t("admin.noDataBody")} />
+          ) : (
+            <BarChart points={data?.userGrowth ?? []} tone="grape" ariaLabel={t("admin.userGrowth")} />
+          )}
         </ChartCard>
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1fr_1fr_1fr]">
-        <ChartCard title="Subject share" subtitle="Of all completed activities">
-          <DonutChart
-            slices={subjectShare.map((slice) => ({
-              label: slice.label,
-              value: slice.value,
-              tone: getSubject(slice.subjectId).tone,
-            }))}
-            size={170}
-            ariaLabel="Subject share"
-          />
+        <ChartCard title={t("admin.subjectShare")} subtitle={t("admin.topSubjectsSubtitle")}>
+          {analytics.isLoading ? (
+            <div className="shimmer h-48 rounded-lg" />
+          ) : (data?.subjectShare.length ?? 0) === 0 ? (
+            <EmptyState compact glyph="🥧" title={t("admin.noDataTitle")} body={t("admin.noDataBody")} />
+          ) : (
+            <DonutChart
+              slices={(data?.subjectShare ?? []).map((slice) => ({
+                label: slice.label,
+                value: slice.value,
+                tone: toneOf(slice.tone),
+              }))}
+              size={170}
+              ariaLabel={t("admin.subjectShare")}
+            />
+          )}
         </ChartCard>
 
         <Card>
-          <CardHeader title="Most popular lessons" />
+          <CardHeader title={t("admin.mostPopularLessons")} />
           <CardBody>
-            <ol className="space-y-3">
-              {topLessons.map((lesson, index) => (
-                <li key={lesson.id} className="flex items-center gap-3">
-                  <span className="t-caption grid h-6 w-6 shrink-0 place-items-center rounded-full bg-surface-muted font-bold text-content-secondary">
-                    {index + 1}
-                  </span>
-                  <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-sm text-base", toneStyles[lesson.tone].soft)} aria-hidden>
-                    {lesson.glyph}
-                  </span>
-                  <span className="t-body-sm min-w-0 flex-1 truncate font-semibold text-content">{lesson.title}</span>
-                  <span className="t-caption shrink-0 font-bold text-content-secondary tabular-nums">
-                    {formatCompact(lesson.completions)}
-                  </span>
-                </li>
-              ))}
-            </ol>
+            {analytics.isLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 5 }, (_, i) => (
+                  <div key={i} className="shimmer h-8 rounded-sm" />
+                ))}
+              </div>
+            ) : (data?.topLessons.length ?? 0) === 0 ? (
+              <EmptyState compact glyph="📚" title={t("admin.noDataTitle")} body={t("admin.noDataBody")} />
+            ) : (
+              <ol className="space-y-3">
+                {(data?.topLessons ?? []).map((lesson, index) => (
+                  <li key={lesson.id} className="flex items-center gap-3">
+                    <span className="t-caption grid h-6 w-6 shrink-0 place-items-center rounded-full bg-surface-muted font-bold text-content-secondary">
+                      {index + 1}
+                    </span>
+                    <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-sm text-base", toneStyles[toneOf(lesson.tone)].soft)} aria-hidden>
+                      {lesson.glyph}
+                    </span>
+                    <span className="t-body-sm min-w-0 flex-1 truncate font-semibold text-content">{lesson.title}</span>
+                    <span className="t-caption shrink-0 font-bold text-content-secondary tabular-nums">
+                      {formatCompact(lesson.completions, intlLocale)}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
           </CardBody>
         </Card>
 
         <Card>
-          <CardHeader title="Most played games" />
+          <CardHeader title={t("admin.mostPlayedGames")} />
           <CardBody>
-            <ol className="space-y-3">
-              {topGames.map((game, index) => (
-                <li key={game.id} className="flex items-center gap-3">
-                  <span className="t-caption grid h-6 w-6 shrink-0 place-items-center rounded-full bg-surface-muted font-bold text-content-secondary">
-                    {index + 1}
-                  </span>
-                  <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-sm text-base", toneStyles[game.tone].soft)} aria-hidden>
-                    {game.glyph}
-                  </span>
-                  <span className="t-body-sm min-w-0 flex-1 truncate font-semibold text-content">{game.title}</span>
-                  <span className="t-caption shrink-0 font-bold text-content-secondary tabular-nums">
-                    {formatCompact(game.plays)}
-                  </span>
-                </li>
-              ))}
-            </ol>
+            {analytics.isLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 5 }, (_, i) => (
+                  <div key={i} className="shimmer h-8 rounded-sm" />
+                ))}
+              </div>
+            ) : (data?.topGames.length ?? 0) === 0 ? (
+              <EmptyState compact glyph="🎮" title={t("admin.noDataTitle")} body={t("admin.noDataBody")} />
+            ) : (
+              <ol className="space-y-3">
+                {(data?.topGames ?? []).map((game, index) => (
+                  <li key={game.id} className="flex items-center gap-3">
+                    <span className="t-caption grid h-6 w-6 shrink-0 place-items-center rounded-full bg-surface-muted font-bold text-content-secondary">
+                      {index + 1}
+                    </span>
+                    <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-sm text-base", toneStyles[toneOf(game.tone)].soft)} aria-hidden>
+                      {game.glyph}
+                    </span>
+                    <span className="t-body-sm min-w-0 flex-1 truncate font-semibold text-content">{game.title}</span>
+                    <span className="t-caption shrink-0 font-bold text-content-secondary tabular-nums">
+                      {formatCompact(game.plays, intlLocale)}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
           </CardBody>
         </Card>
       </div>
@@ -169,175 +192,181 @@ export function AdminAnalyticsView() {
 
 /* --- Platform settings ---------------------------------------------------- */
 
+const FLAG_META: Array<{
+  key: FeatureFlagKey;
+  labelKey:
+    | "admin.flagAiRecommendations"
+    | "admin.flagAiImageGeneration"
+    | "admin.flagVoiceControl"
+    | "admin.flagPwa"
+    | "admin.flagLeaderboard"
+    | "admin.flagPushNotifications"
+    | "admin.flagCertificates"
+    | "admin.flagOfflineLessons";
+  hintKey:
+    | "admin.flagAiRecommendationsHint"
+    | "admin.flagAiImageGenerationHint"
+    | "admin.flagVoiceControlHint"
+    | "admin.flagPwaHint"
+    | "admin.flagLeaderboardHint"
+    | "admin.flagPushNotificationsHint"
+    | "admin.flagCertificatesHint"
+    | "admin.flagOfflineLessonsHint";
+}> = [
+  { key: "AI_RECOMMENDATIONS", labelKey: "admin.flagAiRecommendations", hintKey: "admin.flagAiRecommendationsHint" },
+  { key: "AI_IMAGE_GENERATION", labelKey: "admin.flagAiImageGeneration", hintKey: "admin.flagAiImageGenerationHint" },
+  { key: "VOICE_CONTROL", labelKey: "admin.flagVoiceControl", hintKey: "admin.flagVoiceControlHint" },
+  { key: "PWA", labelKey: "admin.flagPwa", hintKey: "admin.flagPwaHint" },
+  { key: "LEADERBOARD", labelKey: "admin.flagLeaderboard", hintKey: "admin.flagLeaderboardHint" },
+  { key: "PUSH_NOTIFICATIONS", labelKey: "admin.flagPushNotifications", hintKey: "admin.flagPushNotificationsHint" },
+  { key: "CERTIFICATES", labelKey: "admin.flagCertificates", hintKey: "admin.flagCertificatesHint" },
+  { key: "OFFLINE_LESSONS", labelKey: "admin.flagOfflineLessons", hintKey: "admin.flagOfflineLessonsHint" },
+];
+
+const AUDIT_PAGE_SIZE = 15;
+
 export function AdminSettingsView() {
   const t = useT();
+  const { intlLocale } = useI18n();
   const pushToast = useAppStore((s) => s.pushToast);
-  const [section, setSection] = useState<"general" | "content" | "ai" | "security">("general");
-  const [flags, setFlags] = useState({
-    aiRecommendations: true,
-    voiceControl: true,
-    leaderboard: true,
-    pushNotifications: true,
-    offlineLessons: true,
-    aiGeneration: false,
+  const queryClient = useQueryClient();
+  const [auditPage, setAuditPage] = useState(1);
+
+  const flags = useQuery({ queryKey: queryKeys.featureFlags, queryFn: fetchFeatureFlags });
+  const audit = useQuery({
+    queryKey: queryKeys.auditLog({ page: auditPage, limit: AUDIT_PAGE_SIZE }),
+    queryFn: () => fetchAuditLog({ page: auditPage, limit: AUDIT_PAGE_SIZE }),
+    placeholderData: (previous) => previous,
   });
+
+  const toggle = useMutation({
+    mutationFn: ({ key, enabled }: { key: string; enabled: boolean }) => updateFeatureFlag(key, enabled),
+    onMutate: async ({ key, enabled }) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.featureFlags });
+      const previous = queryClient.getQueryData<FeatureFlagsDto>(queryKeys.featureFlags);
+      if (previous) {
+        queryClient.setQueryData<FeatureFlagsDto>(queryKeys.featureFlags, { ...previous, [key]: enabled });
+      }
+      return { previous };
+    },
+    onError: (error, _variables, context) => {
+      if (context?.previous) queryClient.setQueryData(queryKeys.featureFlags, context.previous);
+      pushToast({
+        title: t("state.errorTitle"),
+        description: error instanceof ApiError ? error.message : undefined,
+        tone: "coral",
+        glyph: "⚠️",
+      });
+    },
+    onSuccess: (nextFlags) => {
+      queryClient.setQueryData(queryKeys.featureFlags, nextFlags);
+      pushToast({ title: t("admin.flagSaved"), tone: "mint", glyph: "🚩" });
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.featureFlags });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "audit-log"] });
+    },
+  });
+
+  const auditRows = audit.data?.items ?? [];
+
+  const auditColumns: Array<Column<AuditLogDto>> = [
+    {
+      id: "actor",
+      header: t("admin.colActor"),
+      primary: true,
+      sortValue: (row) => row.userName ?? "",
+      cell: (row) => <span className="font-semibold text-content">{row.userName ?? t("admin.systemActor")}</span>,
+    },
+    {
+      id: "action",
+      header: t("admin.colAction"),
+      cell: (row) => (
+        <span className="rounded-xs bg-surface-muted px-1.5 py-0.5 font-mono text-xs text-content-secondary">{row.action}</span>
+      ),
+    },
+    {
+      id: "resource",
+      header: t("admin.colResource"),
+      secondary: true,
+      cell: (row) => (
+        <span className="text-content-secondary">
+          {row.resource}
+          {row.resourceId ? <span className="t-caption block truncate text-content-tertiary">{row.resourceId}</span> : null}
+        </span>
+      ),
+    },
+    {
+      id: "when",
+      header: t("admin.colWhen"),
+      width: "w-40",
+      sortValue: (row) => row.createdAt,
+      cell: (row) => (
+        <span className="t-caption text-content-secondary">{formatRelativeTime(row.createdAt, new Date(), intlLocale)}</span>
+      ),
+    },
+  ];
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-5">
-      <PageHeading title={t("nav.settings")} subtitle="Platform-wide configuration and feature flags." />
+      <PageHeading title={t("nav.settings")} subtitle={t("admin.settingsSubtitle")} />
 
-      <Tabs
-        variant="pill"
-        ariaLabel="Settings sections"
-        value={section}
-        onChange={setSection}
-        items={[
-          { id: "general", label: "General" },
-          { id: "content", label: t("nav.content") },
-          { id: "ai", label: "AI" },
-          { id: "security", label: "Security" },
-        ]}
-      />
-
-      {section === "general" ? (
-        <Card>
-          <CardHeader title="Platform" subtitle="Identity and defaults for every new account." />
-          <CardBody className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Platform name">{({ id }) => <Input id={id} defaultValue="KidsLearn" />}</Field>
-              <Field label="Support email">{({ id }) => <Input id={id} type="email" defaultValue="help@kidslearn.app" />}</Field>
-              <Field label="Default language">
-                {({ id }) => (
-                  <Select id={id} defaultValue="uz">
-                    {LOCALES.map((locale) => (
-                      <option key={locale.code} value={locale.code}>
-                        {locale.flag} {locale.label}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </Field>
-              <Field label="Default daily goal">
-                {({ id }) => (
-                  <Select id={id} defaultValue="4">
-                    {[2, 4, 6, 8].map((n) => (
-                      <option key={n} value={n}>
-                        {n} lessons
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </Field>
+      <Card>
+        <CardHeader title={t("admin.featureFlags")} subtitle={t("admin.featureFlagsSubtitle")} />
+        <CardBody className="space-y-4">
+          {flags.isLoading ? (
+            <div className="space-y-4">
+              {Array.from({ length: 8 }, (_, i) => (
+                <div key={i} className="shimmer h-10 rounded-sm" />
+              ))}
             </div>
+          ) : flags.isError ? (
+            <InlineError message={t("state.errorBody")} onRetry={() => void flags.refetch()} retryLabel={t("common.retry")} />
+          ) : (
+            FLAG_META.map((flag) => (
+              <Switch
+                key={flag.key}
+                label={t(flag.labelKey)}
+                description={t(flag.hintKey)}
+                checked={flags.data?.[flag.key] ?? false}
+                disabled={toggle.isPending && toggle.variables?.key === flag.key}
+                onChange={(enabled) => toggle.mutate({ key: flag.key, enabled })}
+              />
+            ))
+          )}
+        </CardBody>
+      </Card>
 
-            <div className="space-y-4 rounded-lg bg-surface-muted p-4">
-              <p className="t-label text-content">Feature flags</p>
-              <Switch label="AI recommendations" description="Personalised next-lesson suggestions" checked={flags.aiRecommendations} onChange={(v) => setFlags((f) => ({ ...f, aiRecommendations: v }))} />
-              <Switch label="Voice control" description="Speech commands in lessons and games" checked={flags.voiceControl} onChange={(v) => setFlags((f) => ({ ...f, voiceControl: v }))} />
-              <Switch label="Leaderboard" description="Public ranking by stars" checked={flags.leaderboard} onChange={(v) => setFlags((f) => ({ ...f, leaderboard: v }))} />
-              <Switch label="Push notifications" description="Reminders and reward alerts" checked={flags.pushNotifications} onChange={(v) => setFlags((f) => ({ ...f, pushNotifications: v }))} />
-              <Switch label="Offline lessons" description="Cache lessons for offline play" checked={flags.offlineLessons} onChange={(v) => setFlags((f) => ({ ...f, offlineLessons: v }))} />
-            </div>
-          </CardBody>
-          <CardFooter className="justify-end">
-            <Button onClick={() => pushToast({ title: "Platform settings saved", tone: "mint", glyph: "✅" })}>
-              {t("common.save")}
-            </Button>
-          </CardFooter>
-        </Card>
-      ) : null}
-
-      {section === "content" ? (
-        <Card>
-          <CardHeader title="Content workflow" subtitle="How lessons and media move to publication." />
-          <CardBody className="space-y-4">
-            <Field label="Publishing model" hint="Review requires a second editor to approve.">
-              {({ id }) => (
-                <Select id={id} defaultValue="review">
-                  <option value="direct">Publish directly</option>
-                  <option value="review">Require review</option>
-                  <option value="dual">Require two approvals</option>
-                </Select>
-              )}
-            </Field>
-            <Field label="Auto-archive after" hint="Unpublished drafts are archived automatically.">
-              {({ id }) => (
-                <Select id={id} defaultValue="90">
-                  {[30, 60, 90, 180].map((days) => (
-                    <option key={days} value={days}>
-                      {days} days
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-            <Field label="Maximum upload size">{({ id }) => <Input id={id} defaultValue="25 MB" />}</Field>
-          </CardBody>
-          <CardFooter className="justify-end">
-            <Button onClick={() => pushToast({ title: "Workflow saved", tone: "mint", glyph: "✅" })}>
-              {t("common.save")}
-            </Button>
-          </CardFooter>
-        </Card>
-      ) : null}
-
-      {section === "ai" ? (
-        <Card>
-          <CardHeader title="AI configuration" subtitle="Generation is disabled until a provider is connected." />
-          <CardBody className="space-y-4">
-            <Switch
-              label="Enable AI image generation"
-              description="No provider is configured in this build."
-              checked={flags.aiGeneration}
-              onChange={(v) => setFlags((f) => ({ ...f, aiGeneration: v }))}
-            />
-            <Field label="Provider endpoint" hint="Left blank, the generator stays in preview mode.">
-              {({ id }) => <Input id={id} placeholder="https://api.example.com/v1/images" />}
-            </Field>
-            <Field label="Safety filter" hint="Applied before any asset reaches the review queue.">
-              {({ id }) => (
-                <Select id={id} defaultValue="strict">
-                  <option value="strict">Strict (recommended for children)</option>
-                  <option value="standard">Standard</option>
-                </Select>
-              )}
-            </Field>
-          </CardBody>
-          <CardFooter className="justify-end">
-            <Button onClick={() => pushToast({ title: "AI settings saved", tone: "grape", glyph: "🤖" })}>
-              {t("common.save")}
-            </Button>
-          </CardFooter>
-        </Card>
-      ) : null}
-
-      {section === "security" ? (
-        <Card>
-          <CardHeader title="Security" subtitle="Access rules for the admin console." />
-          <CardBody className="space-y-4">
-            <Switch label="Require 2FA for all admins" description="Applies at the next sign-in." checked onChange={() => undefined} />
-            <Field label="Session timeout">
-              {({ id }) => (
-                <Select id={id} defaultValue="60">
-                  {[15, 30, 60, 240].map((minutes) => (
-                    <option key={minutes} value={minutes}>
-                      {minutes} minutes
-                    </option>
-                  ))}
-                </Select>
-              )}
-            </Field>
-            <Field label="Allowed IP ranges" hint="Leave blank to allow all.">
-              {({ id }) => <Input id={id} placeholder="203.0.113.0/24" />}
-            </Field>
-          </CardBody>
-          <CardFooter className="justify-end">
-            <Button onClick={() => pushToast({ title: "Security settings saved", tone: "mint", glyph: "🔒" })}>
-              {t("common.save")}
-            </Button>
-          </CardFooter>
-        </Card>
-      ) : null}
+      <Card>
+        <CardHeader title={t("admin.auditLog")} subtitle={t("admin.auditSubtitle")} />
+        <CardBody>
+          {audit.isLoading ? (
+            <SkeletonTable rows={6} columns={4} />
+          ) : audit.isError ? (
+            <InlineError message={t("state.errorBody")} onRetry={() => void audit.refetch()} retryLabel={t("common.retry")} />
+          ) : (
+            <>
+              <DataTable
+                rows={auditRows}
+                columns={auditColumns}
+                getRowId={(row) => row.id}
+                pageSize={AUDIT_PAGE_SIZE}
+                caption={t("admin.auditLog")}
+                emptyState={<EmptyState glyph="🗒️" title={t("state.emptyTitle")} body={t("state.emptyBody")} />}
+              />
+              {(audit.data?.meta.totalPages ?? 1) > 1 ? (
+                <Pagination
+                  className="mt-4"
+                  page={auditPage}
+                  totalPages={audit.data?.meta.totalPages ?? 1}
+                  totalItems={audit.data?.meta.total}
+                  onChange={setAuditPage}
+                />
+              ) : null}
+            </>
+          )}
+        </CardBody>
+      </Card>
     </div>
   );
 }
