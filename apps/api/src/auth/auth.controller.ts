@@ -51,7 +51,9 @@ export class AuthController {
   @Public()
   @Post("login")
   @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  // AUTH_THROTTLE_LIMIT is documented in .env.example; the production default
+  // stays 10/min. Local e2e runs raise it because every test signs in.
+  @Throttle({ default: { limit: Number(process.env.AUTH_THROTTLE_LIMIT ?? 10) || 10, ttl: 60_000 } })
   @ApiOperation({ summary: "Sign in with email and password" })
   @ApiEnvelopeResponse(SessionResponseDto, "Session created")
   @ApiUnauthorizedResponse({ description: "INVALID_CREDENTIALS" })
