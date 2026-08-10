@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { IconButton } from "./button";
+import { useT } from "@/i18n/provider";
 
 const FOCUSABLE =
   'a[href],button:not([disabled]),textarea:not([disabled]),input:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
@@ -89,6 +90,7 @@ export interface ModalProps {
 const modalSizes = { sm: "max-w-md", md: "max-w-lg", lg: "max-w-2xl", xl: "max-w-4xl" };
 
 export function Modal({ open, onClose, title, description, size = "md", footer, children, hideClose }: ModalProps) {
+  const t = useT();
   const ref = useOverlay(open, onClose);
   if (!open) return null;
 
@@ -119,7 +121,7 @@ export function Modal({ open, onClose, title, description, size = "md", footer, 
                 {description ? <p className="t-body-sm mt-1 text-content-secondary">{description}</p> : null}
               </div>
               {!hideClose ? (
-                <IconButton label="Close" size="icon-sm" onClick={onClose}>
+                <IconButton label={t("common.close")} size="icon-sm" onClick={onClose}>
                   <X className="h-4 w-4" />
                 </IconButton>
               ) : null}
@@ -156,6 +158,7 @@ export function Drawer({
   footer?: ReactNode;
   className?: string;
 }) {
+  const t = useT();
   const ref = useOverlay(open, onClose);
   if (!open) return null;
 
@@ -181,7 +184,7 @@ export function Drawer({
           {title ? (
             <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
               <h2 className="t-h3 text-content">{title}</h2>
-              <IconButton label="Close" size="icon-sm" onClick={onClose}>
+              <IconButton label={t("common.close")} size="icon-sm" onClick={onClose}>
                 <X className="h-4 w-4" />
               </IconButton>
             </div>
@@ -205,8 +208,8 @@ export function ConfirmDialog({
   onConfirm,
   title,
   body,
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
+  confirmLabel,
+  cancelLabel,
   tone = "danger",
 }: {
   open: boolean;
@@ -218,6 +221,7 @@ export function ConfirmDialog({
   cancelLabel?: string;
   tone?: "danger" | "primary";
 }) {
+  const t = useT();
   return (
     <Modal
       open={open}
@@ -231,7 +235,7 @@ export function ConfirmDialog({
             onClick={onClose}
             className="h-11 rounded-sm border border-border px-4 text-sm font-semibold text-content hover:bg-surface"
           >
-            {cancelLabel}
+            {cancelLabel ?? t("common.cancel")}
           </button>
           <button
             type="button"
@@ -244,7 +248,7 @@ export function ConfirmDialog({
               tone === "danger" ? "bg-danger" : "bg-primary",
             )}
           >
-            {confirmLabel}
+            {confirmLabel ?? t("common.confirm")}
           </button>
         </>
       }

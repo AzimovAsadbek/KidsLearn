@@ -45,7 +45,9 @@ export class GamesService {
 
   async list(user: RequestUser, query: GameQueryDto): Promise<{ items: GameDto[]; total: number }> {
     const isAdmin = user.role === "ADMIN";
-    const prismaLocale = toPrismaLocale(user.locale);
+    // An explicit ?locale wins so the language switcher affects titles
+    // immediately; the account locale is the fallback.
+    const prismaLocale = toPrismaLocale(query.locale ?? user.locale);
 
     let ageCategories: string[] | undefined;
     if (query.childId) {

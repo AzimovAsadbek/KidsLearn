@@ -48,8 +48,8 @@ export function ChildrenView() {
       ) : all.length === 0 ? (
         <EmptyState
           glyph="👶"
-          title="No children yet"
-          body="Add your first child and we'll tailor every lesson to their age."
+          title={t("parent.noChildrenTitle")}
+          body={t("parent.noChildrenBody")}
           action={<Button onClick={() => setAddOpen(true)}>{t("parent.addChild")}</Button>}
         />
       ) : (
@@ -105,7 +105,7 @@ export function ChildCard({ child }: { child: ChildDto }) {
             🔥 {progress?.currentStreak ?? 0}
           </Badge>
           <Badge tone="brand" size="sm">
-            Lv {progress?.level ?? 1}
+            {t("parent.levelShort")} {progress?.level ?? 1}
           </Badge>
         </div>
       </div>
@@ -115,15 +115,15 @@ export function ChildCard({ child }: { child: ChildDto }) {
           <div className="min-w-0">
             <h3 className="t-h3 truncate text-content">{child.name}</h3>
             <p className="t-caption text-content-secondary">
-              {child.age} years ·{" "}
+              {t("parent.ageYears", { age: child.age })} ·{" "}
               {progress?.lastActivityAt
                 ? t("parent.lastActive", { time: formatRelativeTime(progress.lastActivityAt, new Date(), intlLocale) })
-                : "No activity yet"}
+                : t("parent.noActivityYet")}
             </p>
           </div>
           <span
             className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-sm text-lg", toneStyles[tone]?.soft ?? toneStyles.brand.soft)}
-            title={`Ages ${child.ageCategory.replace("AGE_", "").replace("_", "–")}`}
+            title={t("parent.agesTitle", { band: child.ageCategory.replace("AGE_", "").replace("_", "–") })}
             aria-hidden
           >
             {child.avatarGlyph}
@@ -134,7 +134,7 @@ export function ChildCard({ child }: { child: ChildDto }) {
           <ProgressBar
             value={levelPercent}
             tone={tone}
-            label={`Level ${progress?.level ?? 1} → ${(progress?.level ?? 1) + 1}`}
+            label={t("parent.levelProgress", { from: progress?.level ?? 1, to: (progress?.level ?? 1) + 1 })}
             showValue
           />
         </div>
@@ -143,7 +143,7 @@ export function ChildCard({ child }: { child: ChildDto }) {
           {[
             { label: t("common.stars"), value: progress?.stars ?? 0, glyph: "⭐" },
             { label: t("nav.lessons"), value: progress?.lessonsCompleted ?? 0, glyph: "📗" },
-            { label: "Time", value: formatDuration(Math.round((progress?.learningSeconds ?? 0) / 60)), glyph: "⏱️" },
+            { label: t("common.time"), value: formatDuration(Math.round((progress?.learningSeconds ?? 0) / 60)), glyph: "⏱️" },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <dt className="t-caption text-content-secondary">

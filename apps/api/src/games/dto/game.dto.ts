@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -13,7 +14,7 @@ import {
   Min,
   ValidateNested,
 } from "class-validator";
-import { AgeCategory, ContentStatus, Difficulty, GameType } from "@kidslearn/types";
+import { AgeCategory, ContentStatus, Difficulty, GameType, type Locale } from "@kidslearn/types";
 import { SearchQueryDto } from "../../common/dto/pagination.dto";
 
 export class GameQueryDto extends SearchQueryDto {
@@ -46,6 +47,11 @@ export class GameQueryDto extends SearchQueryDto {
   @IsOptional()
   @IsUUID()
   childId?: string;
+
+  @ApiPropertyOptional({ enum: ["uz", "ru", "en"], description: "Locale for titles and descriptions" })
+  @IsOptional()
+  @IsIn(["uz", "ru", "en"])
+  locale?: Locale;
 }
 
 export class StartSessionDto {

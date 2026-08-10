@@ -3,6 +3,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n, useT } from "@/i18n/provider";
 
 export interface Column<T> {
   id: string;
@@ -56,6 +57,7 @@ export function DataTable<T>({
   className,
   caption,
 }: DataTableProps<T>) {
+  const t = useT();
   const [sort, setSort] = useState<SortState | null>(null);
   const [page, setPage] = useState(1);
 
@@ -109,7 +111,7 @@ export function DataTable<T>({
                   <th scope="col" className="w-12 px-4 py-3">
                     <input
                       type="checkbox"
-                      aria-label="Select all rows on this page"
+                      aria-label={t("common.selectAllRows")}
                       checked={allOnPageSelected}
                       onChange={() =>
                         onSelectionChange?.(
@@ -279,6 +281,8 @@ export function Pagination({
   onChange: (page: number) => void;
   className?: string;
 }) {
+  const t = useT();
+  const { plural } = useI18n();
   // Always show first, last, current and its neighbours; elide the rest.
   const pages: Array<number | "gap"> = [];
   for (let i = 1; i <= totalPages; i += 1) {
@@ -289,11 +293,11 @@ export function Pagination({
   return (
     <nav
       className={cn("flex flex-wrap items-center justify-between gap-3", className)}
-      aria-label="Pagination"
+      aria-label={t("common.pagination")}
     >
       {typeof totalItems === "number" ? (
         <p className="t-caption text-content-secondary">
-          Page {page} of {totalPages} · {totalItems} items
+          {t("common.pageOf", { page, total: totalPages })} · {plural("plural.items", totalItems)}
         </p>
       ) : (
         <span />
@@ -303,7 +307,7 @@ export function Pagination({
           type="button"
           onClick={() => onChange(Math.max(1, page - 1))}
           disabled={page === 1}
-          aria-label="Previous page"
+          aria-label={t("common.previousPage")}
           className="grid h-9 w-9 place-items-center rounded-xs border border-border text-content-secondary transition-colors hover:bg-surface-muted disabled:opacity-40"
         >
           <ChevronLeft className="h-4 w-4" />
@@ -334,7 +338,7 @@ export function Pagination({
           type="button"
           onClick={() => onChange(Math.min(totalPages, page + 1))}
           disabled={page === totalPages}
-          aria-label="Next page"
+          aria-label={t("common.nextPage")}
           className="grid h-9 w-9 place-items-center rounded-xs border border-border text-content-secondary transition-colors hover:bg-surface-muted disabled:opacity-40"
         >
           <ChevronRight className="h-4 w-4" />

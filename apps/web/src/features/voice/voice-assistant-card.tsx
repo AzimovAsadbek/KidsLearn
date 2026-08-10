@@ -105,7 +105,7 @@ export function VoiceAssistantCard({ onCommand }: { onCommand?: (command: VoiceC
             {t("voice.assistant")}
           </span>
         }
-        action={supported ? <Badge tone="mint" size="sm">Ready</Badge> : <Badge tone="sky" size="sm">Unavailable</Badge>}
+        action={supported ? <Badge tone="mint" size="sm">{t("voice.ready")}</Badge> : <Badge tone="sky" size="sm">{t("voice.unavailable")}</Badge>}
       />
       <CardBody className="flex items-center gap-5">
         <VoiceButton

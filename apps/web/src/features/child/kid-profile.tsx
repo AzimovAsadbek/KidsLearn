@@ -97,7 +97,7 @@ export function KidProfileView() {
           />
           <h1 className="font-display mt-4 text-3xl font-extrabold text-content">{selectedChild.name}</h1>
           <p className="t-body-sm mt-0.5 font-bold text-content-secondary">
-            {selectedChild.age} years old · Level {progress?.level ?? 1}
+            {t("parent.ageYears", { age: selectedChild.age })} · {t("common.level")} {progress?.level ?? 1}
           </p>
 
           {progress ? (
@@ -116,7 +116,7 @@ export function KidProfileView() {
         <KidStat
           glyph="⏱️"
           value={formatDuration(Math.round((progress?.learningSeconds ?? 0) / 60))}
-          label="Time"
+          label={t("common.time")}
           tone="sky"
         />
       </section>
@@ -129,14 +129,14 @@ export function KidProfileView() {
             size={92}
             thickness={9}
             tone={nextUp.tone as Tone}
-            label={`${nextUp.progress}% towards ${nextUp.title}`}
+            label={t("kid.towardsMedal", { percent: nextUp.progress, title: nextUp.title })}
           >
             <span className="text-3xl" aria-hidden>
               {nextUp.glyph}
             </span>
           </ProgressRing>
           <div className="min-w-0 flex-1">
-            <p className="t-overline text-content-tertiary">Almost there</p>
+            <p className="t-overline text-content-tertiary">{t("kid.almostThere")}</p>
             <h2 className="font-display text-xl font-extrabold text-content">{nextUp.title}</h2>
             <p className="t-body-sm font-semibold text-content-secondary">{nextUp.description}</p>
           </div>
@@ -151,7 +151,7 @@ export function KidProfileView() {
         </h2>
         {unlocked.length === 0 ? (
           <p className="t-body-sm rounded-2xl border-2 border-dashed border-border-strong bg-surface/60 p-6 text-center font-semibold text-content-secondary">
-            Finish a lesson to earn your first medal!
+            {t("kid.firstMedalHint")}
           </p>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -164,8 +164,8 @@ export function KidProfileView() {
 
       {/* ---- Streak calendar ------------------------------------------------ */}
       <section className="rounded-3xl border-2 border-border bg-surface p-5 shadow-soft">
-        <h2 className="font-display mb-3 text-xl font-extrabold text-content">My learning days</h2>
-        <HeatGrid values={(statistics.data?.consistency ?? []).map((day) => day.level)} ariaLabel="Days learned" />
+        <h2 className="font-display mb-3 text-xl font-extrabold text-content">{t("kid.learningDays")}</h2>
+        <HeatGrid values={(statistics.data?.consistency ?? []).map((day) => day.level)} ariaLabel={t("kid.daysLearned")} />
       </section>
 
       {/* ---- Leaderboard ---------------------------------------------------- */}

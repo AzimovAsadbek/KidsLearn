@@ -61,13 +61,18 @@ export function GameEngine({ game }: { game: GameDto }) {
 
   const submitMutation = useMutation({
     mutationFn: submitGameAttempt,
-    onError: (_error, variables) => {
-      // Never lose a finished game. The attempt carries an idempotency key, so
-      // replaying it from the queue can't double-award.
+    onError: (error, variables) => {
+      // A server rejection is final — queueing it would promise stars that can
+      // never arrive. Only a network failure goes to the offline queue, whose
+      // idempotency key makes the eventual replay safe.
+      if (error instanceof ApiError) {
+        pushToast({ title: error.message, tone: "coral", glyph: "⚠️" });
+        return;
+      }
       queueOfflineAttempt(variables as Parameters<typeof queueOfflineAttempt>[0]);
       pushToast({
-        title: "Saved for later",
-        description: "We'll add these stars as soon as we're back online.",
+        title: t("game.savedForLater"),
+        description: t("game.savedForLaterBody"),
         tone: "sky",
         glyph: "📶",
       });
@@ -83,7 +88,7 @@ export function GameEngine({ game }: { game: GameDto }) {
       }
       for (const achievement of graded.unlockedAchievements) {
         pushToast({
-          title: `Unlocked ${achievement.title}`,
+          title: achievement.title,
           description: achievement.description,
           tone: achievement.tone as Tone,
           glyph: achievement.glyph,
@@ -107,9 +112,9 @@ export function GameEngine({ game }: { game: GameDto }) {
     return (
       <div className="grid min-h-dvh place-items-center px-4">
         <ErrorState
-          title="No child selected"
-          body="Pick a child before starting a game."
-          action={<Button onClick={() => router.push("/dashboard")}>Go to the dashboard</Button>}
+          title={t("analytics.noChildTitle")}
+          body={t("game.pickChildBody")}
+          action={<Button onClick={() => router.push("/dashboard")}>{t("state.goHome")}</Button>}
         />
       </div>
     );
@@ -124,7 +129,7 @@ export function GameEngine({ game }: { game: GameDto }) {
         onExit={() => {
           pushToast({
             title: `+${result.xpAwarded} XP · +${result.starsAwarded} ⭐`,
-            description: `${game.title} finished`,
+            description: game.title,
             tone: "mint",
             glyph: "🎮",
           });
@@ -151,9 +156,9 @@ export function GameEngine({ game }: { game: GameDto }) {
           open={exitOpen}
           onClose={() => setExitOpen(false)}
           onConfirm={() => router.push("/kids/games")}
-          title="Leave the game?"
-          body="Your score in this round won't be saved."
-          confirmLabel="Leave"
+          title={t("game.leaveTitle")}
+          body={t("game.leaveBody")}
+          confirmLabel={t("game.leave")}
           cancelLabel={t("common.cancel")}
           tone="primary"
         />
@@ -203,9 +208,9 @@ function GameIntro({
 
       <dl className="mt-6 flex gap-6">
         {[
-          ["Rounds", game.type === "MEMORY" ? "6 pairs" : game.type === "PUZZLE" ? "9 pieces" : String(game.roundsPerSession)],
-          ["Ages", game.ageCategory.replace("AGE_", "").replace("_", "–")],
-          ["Level", t(difficultyKey)],
+          [t("game.rounds"), game.type === "MEMORY" ? t("game.pairsShort", { count: 6 }) : game.type === "PUZZLE" ? t("game.piecesShort", { count: 9 }) : String(game.roundsPerSession)],
+          [t("game.ages"), game.ageCategory.replace("AGE_", "").replace("_", "–")],
+          [t("common.level"), t(difficultyKey)],
         ].map(([label, value]) => (
           <div key={label}>
             <dt className="t-caption font-bold text-content-secondary">{label}</dt>
@@ -216,7 +221,7 @@ function GameIntro({
 
       {error ? (
         <p role="alert" className="t-body-sm mt-6 max-w-sm font-semibold text-danger">
-          {error instanceof ApiError ? error.message : "We couldn't start this game. Please try again."}
+          {error instanceof ApiError ? error.message : t("state.errorTitle")}
         </p>
       ) : null}
 
@@ -410,7 +415,7 @@ function GameStage({
         {submitting ? (
           <div className="flex flex-col items-center gap-3 py-10">
             <Spinner className="h-8 w-8 text-primary" />
-            <p className="t-body font-bold text-content-secondary">Saving your score…</p>
+            <p className="t-body font-bold text-content-secondary">{t("game.savingScore")}</p>
           </div>
         ) : session.board?.kind === "MEMORY" ? (
           <MemoryBoard
@@ -587,6 +592,7 @@ function GameComplete({
   onExit: () => void;
 }) {
   const t = useT();
+  const { plural } = useI18n();
   const perfect = result.score === result.total;
 
   return (
@@ -616,7 +622,7 @@ function GameComplete({
       <dl className="mt-8 grid grid-cols-3 gap-3 sm:gap-5">
         {[
           [t("game.score"), `${result.score}/${result.total}`, "🎯"],
-          ["Accuracy", `${result.accuracy}%`, "✅"],
+          [t("game.accuracy"), `${result.accuracy}%`, "✅"],
           [t("game.time"), `${result.durationSeconds}s`, "⏱️"],
         ].map(([label, value, glyph]) => (
           <div key={label} className="rounded-2xl border-2 border-border bg-surface px-5 py-4 shadow-soft">
@@ -633,7 +639,7 @@ function GameComplete({
         +{result.xpAwarded} XP · +{result.starsAwarded} ⭐
       </p>
       <p className="t-caption mt-1 font-semibold text-content-secondary">
-        Level {result.progress.level} · {result.progress.stars} stars in total
+        {t("common.level")} {result.progress.level} · {plural("plural.stars", result.progress.stars)}
       </p>
 
       <div className="mt-8 flex flex-wrap justify-center gap-3">

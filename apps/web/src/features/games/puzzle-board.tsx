@@ -117,11 +117,11 @@ export function PuzzleBoardView({
       {/* Tray */}
       <div className="mx-auto mt-5 max-w-md">
         <p className="t-caption mb-2 text-center font-bold text-content-secondary">
-          {heldId ? "Now tap where it belongs" : "Tap or drag a piece"}
+          {heldId ? t("puzzle.tapWhere") : t("puzzle.tapOrDrag")}
         </p>
         <div className="flex flex-wrap justify-center gap-2.5 rounded-2xl border-2 border-border bg-surface p-3">
           {tray.length === 0 ? (
-            <p className="t-body-sm py-3 font-bold text-success">All pieces placed! 🎉</p>
+            <p className="t-body-sm py-3 font-bold text-success">{t("puzzle.allPlaced")} 🎉</p>
           ) : (
             tray.map((piece) => (
               <button

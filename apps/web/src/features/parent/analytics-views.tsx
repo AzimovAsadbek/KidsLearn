@@ -57,7 +57,7 @@ export function ProgressView() {
   }
 
   if (!child) {
-    return <EmptyState glyph="👶" title="No child selected" body="Add a child to start tracking progress." />;
+    return <EmptyState glyph="👶" title={t("analytics.noChildTitle")} body={t("analytics.noChildBody")} />;
   }
 
   const stats = query.data;
@@ -70,17 +70,17 @@ export function ProgressView() {
     <div className="mx-auto w-full max-w-[95rem] space-y-6">
       <PageHeading
         title={t("nav.progress")}
-        subtitle={`${child.name}'s learning journey, in detail.`}
+        subtitle={t("analytics.journeySubtitle", { name: child.name })}
         actions={
           <Button variant="secondary" leadingIcon={<Download className="h-4 w-4" />} onClick={() => window.print()}>
-            Export report
+            {t("analytics.exportReport")}
           </Button>
         }
       />
 
       <Tabs
         variant="segmented"
-        ariaLabel="Range"
+        ariaLabel={t("analytics.range")}
         value={preset}
         onChange={setPreset}
         items={[
@@ -92,30 +92,30 @@ export function ProgressView() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-        <StatCard tone="brand" glyph="⏱️" label="Total time" value={formatDuration(Math.round((progress?.learningSeconds ?? 0) / 60))} />
+        <StatCard tone="brand" glyph="⏱️" label={t("analytics.totalTime")} value={formatDuration(Math.round((progress?.learningSeconds ?? 0) / 60))} />
         <StatCard tone="mint" glyph="📗" label={t("parent.lessonsCompleted")} value={progress?.lessonsCompleted ?? 0} />
-        <StatCard tone="blossom" glyph="🎮" label="Games played" value={progress?.gamesPlayed ?? 0} />
+        <StatCard tone="blossom" glyph="🎮" label={t("analytics.gamesPlayed")} value={progress?.gamesPlayed ?? 0} />
         <StatCard tone="sun" glyph="⭐" label={t("common.stars")} value={progress?.stars ?? 0} />
         <StatCard tone="grape" glyph="⚡" label={t("common.xp")} value={progress?.xp ?? 0} />
         <StatCard tone="coral" glyph="🔥" label={t("common.streak")} value={progress?.currentStreak ?? 0} unit={t("common.days")} />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1.6fr_1fr]">
-        <ChartCard title={t("parent.weeklyProgress")} subtitle="Minutes of focused learning">
-          <AreaChart points={stats?.series.learningMinutes ?? []} tone="brand" valueSuffix=" min" ariaLabel="Learning minutes" />
+        <ChartCard title={t("parent.weeklyProgress")} subtitle={t("analytics.minutesSubtitle")}>
+          <AreaChart points={stats?.series.learningMinutes ?? []} tone="brand" valueSuffix=" min" ariaLabel={t("analytics.learningMinutes")} />
         </ChartCard>
         <SubjectStrengthCard strengths={strengths} />
       </div>
 
       <div className="grid gap-5 xl:grid-cols-3">
-        <ChartCard title="Lessons completed" subtitle="Per day">
-          <BarChart points={stats?.series.lessons ?? []} tone="mint" ariaLabel="Lessons completed per day" />
+        <ChartCard title={t("parent.lessonsCompleted")} subtitle={t("analytics.perDay")}>
+          <BarChart points={stats?.series.lessons ?? []} tone="mint" ariaLabel={t("parent.lessonsCompleted")} />
         </ChartCard>
-        <ChartCard title="Accuracy" subtitle="Share of correct answers">
-          <AreaChart points={stats?.series.accuracy ?? []} tone="lagoon" valueSuffix="%" ariaLabel="Accuracy" />
+        <ChartCard title={t("analytics.accuracy")} subtitle={t("analytics.accuracyShare")}>
+          <AreaChart points={stats?.series.accuracy ?? []} tone="lagoon" valueSuffix="%" ariaLabel={t("analytics.accuracy")} />
         </ChartCard>
         <Card>
-          <CardHeader title="Learning consistency" subtitle="Last 5 weeks" />
+          <CardHeader title={t("analytics.consistencyTitle")} subtitle={t("analytics.consistencySubtitle")} />
           <CardBody>
             <HeatGrid values={(stats?.consistency ?? []).map((day) => day.level)} />
           </CardBody>
@@ -124,10 +124,10 @@ export function ProgressView() {
 
       <div className="grid gap-5 md:grid-cols-2">
         {strongest ? (
-          <TopicCard title="Strongest topic" entry={strongest} tone="mint" note="Keep this warm with a short game each week." />
+          <TopicCard title={t("analytics.strongestTopic")} entry={strongest} tone="mint" note={t("analytics.strongestNote")} />
         ) : null}
         {weakest && weakest !== strongest ? (
-          <TopicCard title="Needs practice" entry={weakest} tone="tangerine" note="Ten focused minutes a day moves this fastest." />
+          <TopicCard title={t("analytics.needsPractice")} entry={weakest} tone="tangerine" note={t("analytics.practiceNote")} />
         ) : null}
       </div>
     </div>
@@ -183,10 +183,10 @@ export function StatisticsView() {
     <div className="mx-auto w-full max-w-[95rem] space-y-6">
       <PageHeading
         title={t("nav.statistics")}
-        subtitle="Filter by child and period. Every figure is computed from real activity."
+        subtitle={t("analytics.statsSubtitle")}
         actions={
           <Button variant="secondary" leadingIcon={<Download className="h-4 w-4" />} onClick={() => window.print()}>
-            Export
+            {t("common.export")}
           </Button>
         }
       />
@@ -195,7 +195,7 @@ export function StatisticsView() {
         <CardBody className="flex flex-wrap items-end gap-3 pt-5">
           <Tabs
             variant="segmented"
-            ariaLabel="Period"
+            ariaLabel={t("analytics.period")}
             value={preset}
             onChange={setPreset}
             items={[
@@ -207,7 +207,7 @@ export function StatisticsView() {
           />
           <div className="ml-auto">
             <Select
-              aria-label="Child"
+              aria-label={t("analytics.child")}
               value={selectedChild?.id ?? ""}
               onChange={(e) => selectChild(e.target.value)}
               className="w-44"
@@ -229,52 +229,52 @@ export function StatisticsView() {
           <StatCard
             tone="brand"
             glyph="⏱️"
-            label="Learning time"
+            label={t("analytics.learningTime")}
             value={formatDuration(Math.round((stats?.learningSeconds ?? 0) / 60))}
-            delta={{ value: stats?.deltas.learningSeconds ?? 0, suffix: "%", label: "vs last period" }}
+            delta={{ value: stats?.deltas.learningSeconds ?? 0, suffix: "%", label: t("analytics.vsLastPeriod") }}
           />
           <StatCard
             tone="mint"
             glyph="📗"
             label={t("parent.lessonsCompleted")}
             value={stats?.lessonsCompleted ?? 0}
-            delta={{ value: stats?.deltas.lessonsCompleted ?? 0, suffix: "%", label: "vs last period" }}
+            delta={{ value: stats?.deltas.lessonsCompleted ?? 0, suffix: "%", label: t("analytics.vsLastPeriod") }}
           />
           <StatCard
             tone="lagoon"
             glyph="🎯"
-            label="Accuracy"
+            label={t("analytics.accuracy")}
             value={`${stats?.accuracy ?? 0}%`}
-            delta={{ value: stats?.deltas.accuracy ?? 0, suffix: "pt", label: "vs last period" }}
+            delta={{ value: stats?.deltas.accuracy ?? 0, suffix: "pt", label: t("analytics.vsLastPeriod") }}
           />
           <StatCard
             tone="grape"
             glyph="⚡"
-            label="XP earned"
+            label={t("analytics.xpEarned")}
             value={stats?.xpEarned ?? 0}
-            delta={{ value: stats?.deltas.xpEarned ?? 0, suffix: "%", label: "vs last period" }}
+            delta={{ value: stats?.deltas.xpEarned ?? 0, suffix: "%", label: t("analytics.vsLastPeriod") }}
           />
         </div>
       )}
 
       <div className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
-        <ChartCard title="Learning time" subtitle={selectedChild?.name ?? ""}>
-          <AreaChart points={stats?.series.learningMinutes ?? []} tone="brand" valueSuffix=" min" ariaLabel="Learning time" />
+        <ChartCard title={t("analytics.learningTime")} subtitle={selectedChild?.name ?? ""}>
+          <AreaChart points={stats?.series.learningMinutes ?? []} tone="brand" valueSuffix=" min" ariaLabel={t("analytics.learningTime")} />
         </ChartCard>
 
-        <ChartCard title="Subject performance" subtitle="Questions answered by subject">
+        <ChartCard title={t("analytics.subjectPerformance")} subtitle={t("analytics.questionsBySubject")}>
           {donut.length === 0 ? (
             <p className="t-body-sm py-10 text-center text-content-secondary">
-              Subject data appears once questions have been answered.
+              {t("analytics.subjectDataEmpty")}
             </p>
           ) : (
             <DonutChart
               slices={donut}
-              ariaLabel="Subject performance"
+              ariaLabel={t("analytics.subjectPerformance")}
               centre={
                 <div>
                   <p className="t-h2 font-extrabold text-content tabular-nums">{stats?.accuracy ?? 0}%</p>
-                  <p className="t-caption font-semibold text-content-secondary">Overall</p>
+                  <p className="t-caption font-semibold text-content-secondary">{t("analytics.overall")}</p>
                 </div>
               }
             />
@@ -283,19 +283,19 @@ export function StatisticsView() {
       </div>
 
       <div className="grid gap-5 xl:grid-cols-3">
-        <ChartCard title="Completed lessons" subtitle="Per day">
-          <BarChart points={stats?.series.lessons ?? []} tone="mint" ariaLabel="Completed lessons" />
+        <ChartCard title={t("analytics.completedLessons")} subtitle={t("analytics.perDay")}>
+          <BarChart points={stats?.series.lessons ?? []} tone="mint" ariaLabel={t("analytics.completedLessons")} />
         </ChartCard>
-        <ChartCard title="Accuracy trend" subtitle="Per day">
-          <AreaChart points={stats?.series.accuracy ?? []} tone="blossom" valueSuffix="%" ariaLabel="Accuracy trend" />
+        <ChartCard title={t("analytics.accuracyTrend")} subtitle={t("analytics.perDay")}>
+          <AreaChart points={stats?.series.accuracy ?? []} tone="blossom" valueSuffix="%" ariaLabel={t("analytics.accuracyTrend")} />
         </ChartCard>
-        <ChartCard title="XP earned" subtitle="Per day">
-          <AreaChart points={stats?.series.xp ?? []} tone="grape" valueSuffix=" XP" ariaLabel="XP earned" />
+        <ChartCard title={t("analytics.xpEarned")} subtitle={t("analytics.perDay")}>
+          <AreaChart points={stats?.series.xp ?? []} tone="grape" valueSuffix=" XP" ariaLabel={t("analytics.xpEarned")} />
         </ChartCard>
       </div>
 
       <Card>
-        <CardHeader title="Streak calendar" subtitle="Every square is one day of learning" />
+        <CardHeader title={t("analytics.streakCalendar")} subtitle={t("analytics.streakCalendarSubtitle")} />
         <CardBody>
           <HeatGrid values={(stats?.consistency ?? []).map((day) => day.level)} />
         </CardBody>

@@ -4,12 +4,14 @@ import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
 import { useAppStore } from "@/store/app-store";
+import { useT } from "@/i18n/provider";
 
 /**
  * Toast viewport. Mounted once in the root layout; anything in the app can
  * publish through `useAppStore().pushToast`.
  */
 export function ToastViewport() {
+  const t = useT();
   const toasts = useAppStore((s) => s.toasts);
   const dismiss = useAppStore((s) => s.dismissToast);
 
@@ -17,7 +19,7 @@ export function ToastViewport() {
     <div
       className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-center gap-2 p-4 sm:inset-x-auto sm:right-4 sm:items-end"
       role="region"
-      aria-label="Notifications"
+      aria-label={t("common.notifications")}
     >
       {toasts.map((toast) => (
         <div
@@ -47,7 +49,7 @@ export function ToastViewport() {
           <button
             type="button"
             onClick={() => dismiss(toast.id)}
-            aria-label="Dismiss notification"
+            aria-label={t("common.dismissNotification")}
             className="shrink-0 rounded-xs p-1 text-content-tertiary hover:bg-surface-muted hover:text-content"
           >
             <X className="h-3.5 w-3.5" />

@@ -18,7 +18,7 @@ export function ForgotForm() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-      setError("Enter a valid email address.");
+      setError(t("auth.invalidEmail"));
       return;
     }
     setError(undefined);
@@ -34,7 +34,7 @@ export function ForgotForm() {
         <div className="mx-auto grid h-20 w-20 place-items-center rounded-2xl bg-success-soft text-5xl" aria-hidden>
           📬
         </div>
-        <h1 className="t-h1 mt-5 text-content">Check your inbox</h1>
+        <h1 className="t-h1 mt-5 text-content">{t("auth.checkInbox")}</h1>
         <p className="t-body mt-2 text-balance text-content-secondary">
           If an account exists for <strong className="text-content">{email}</strong>, a reset link is on
           its way. It expires in 30 minutes.

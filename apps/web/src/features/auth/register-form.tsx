@@ -28,11 +28,11 @@ export function RegisterForm() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     const next: typeof errors = {};
-    if (values.name.trim().length < 2) next.name = "Please tell us your name.";
+    if (values.name.trim().length < 2) next.name = t("auth.nameRequired");
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(values.email)) next.email = "Enter a valid email address.";
-    if (values.password.length < 8) next.password = "Use at least 8 characters.";
-    if (values.confirm !== values.password) next.confirm = "Passwords don't match.";
-    if (!accepted) next.terms = "Please accept the terms to continue.";
+    if (values.password.length < 8) next.password = t("auth.passwordMin8");
+    if (values.confirm !== values.password) next.confirm = t("auth.passwordsDontMatch");
+    if (!accepted) next.terms = t("auth.acceptTerms");
     setErrors(next);
     if (Object.keys(next).length > 0) return;
 

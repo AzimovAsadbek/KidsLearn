@@ -47,7 +47,7 @@ export function HeaderChildSwitcher() {
           <span className="min-w-0 text-left">
             <span className="t-label block truncate text-content">{selectedChild.name}</span>
             <span className="t-caption block text-content-tertiary">
-              {selectedChild.age} yrs · Lv {selectedChild.progress?.level ?? 1}
+              {t("kid.ageBand", { band: selectedChild.age })} · {t("parent.levelShort")} {selectedChild.progress?.level ?? 1}
             </span>
           </span>
           <ChevronDown className={cn("h-4 w-4 shrink-0 text-content-tertiary transition-transform", open && "rotate-180")} />
@@ -75,7 +75,7 @@ export function HeaderChildSwitcher() {
               <span className="min-w-0 flex-1">
                 <span className="t-body-sm block truncate font-semibold text-content">{child.name}</span>
                 <span className="t-caption block text-content-secondary">
-                  {child.age} yrs · ⭐ {child.progress?.stars ?? 0} · 🔥 {child.progress?.currentStreak ?? 0}
+                  {t("kid.ageBand", { band: child.age })} · ⭐ {child.progress?.stars ?? 0} · 🔥 {child.progress?.currentStreak ?? 0}
                 </span>
               </span>
               {child.id === selectedChild.id ? <Check className="h-4 w-4 shrink-0 text-primary" /> : null}
@@ -133,7 +133,7 @@ export function FamilyOverview() {
               <Avatar spec={{ glyph: child.avatarGlyph, tone: child.avatarTone as Tone }} size="sm" ring={active} />
               <span className="text-left">
                 <span className="t-label block text-content">{child.name}</span>
-                <span className="t-caption block text-content-tertiary">{child.age} yrs</span>
+                <span className="t-caption block text-content-tertiary">{t("kid.ageBand", { band: child.age })}</span>
               </span>
             </button>
           );

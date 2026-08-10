@@ -13,9 +13,17 @@ const ADMIN = { email: "admin@kidslearn.app", password: "kidslearn2026" };
 
 async function signIn(page: Page, who: { email: string; password: string }) {
   await page.goto("/login");
-  await page.getByLabel("Email address").fill(who.email);
-  await page.getByLabel("Password", { exact: true }).fill(who.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  // Scope to the visible page region: streaming SSR leaves a hidden
+  // <div id="S:0"> template copy of the form under <body> in dev.
+  const main = page.getByRole("main");
+  await main.getByLabel("Email address").fill(who.email);
+  // Role engine computes the accessible name ("Password") without the
+  // aria-hidden required marker, and can't collide with the toggle button.
+  await main.getByRole("textbox", { name: "Password", exact: true }).fill(who.password);
+  await main.getByRole("button", { name: "Sign in" }).click();
+  // Wait for the session to land before navigating anywhere else — leaving
+  // early would cancel the login response and lose the refresh cookie.
+  await page.waitForURL(/\/(dashboard|admin)/, { timeout: 15_000 });
 }
 
 test.describe("parent", () => {
@@ -52,12 +60,13 @@ test.describe("parent", () => {
     await page.goto("/children?add=1");
 
     const name = `E2E ${Date.now().toString().slice(-5)}`;
-    await page.getByLabel("Child's name").fill(name);
-    await page.getByLabel("Date of birth").fill("2022-04-01");
-    await page.getByRole("button", { name: "Next" }).click();
-    await page.getByRole("button", { name: /Avatar 3/ }).click();
-    await page.getByRole("button", { name: "Next" }).click();
-    await page.getByRole("button", { name: "Create" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Child's name").fill(name);
+    await dialog.getByLabel("Date of birth").fill("2022-04-01");
+    await dialog.getByRole("button", { name: "Next" }).click();
+    await dialog.getByRole("button", { name: /Avatar 3/ }).click();
+    await dialog.getByRole("button", { name: "Next" }).click();
+    await dialog.getByRole("button", { name: "Create" }).click();
 
     await expect(page.getByText(name)).toBeVisible({ timeout: 15_000 });
   });
@@ -72,25 +81,24 @@ test.describe("child", () => {
     const before = Number((await page.locator("text=Stars earned").locator("xpath=..").innerText()).match(/\d+/)?.[0] ?? "0");
 
     await page.goto("/kids/games/color-match");
-    await page.getByRole("button", { name: /Play/ }).click();
+    await page.getByRole("button", { name: /Play/ }).first().click();
 
-    // Work through the rounds: try options until one is accepted.
-    for (let round = 0; round < 6; round += 1) {
-      for (let attempt = 0; attempt < 8; attempt += 1) {
-        const options = page.locator("main button[aria-label]");
-        const count = await options.count();
-        if (count === 0) break;
-        await options.nth(attempt % count).click();
-        await page.waitForTimeout(900);
-        const advanced = await page.locator(`text=${round + 2}/6`).count();
-        const finished = await page.getByRole("button", { name: /Play again/ }).count();
-        if (advanced > 0 || finished > 0) break;
-      }
-      if ((await page.getByRole("button", { name: /Play again/ }).count()) > 0) break;
+    // Answer every round correctly: the prompt names the colour, so the test
+    // exercises real server grading deterministically. The result screen is
+    // detected by its stats grid, not by "Play again" (the in-game replay
+    // control shares that label).
+    for (let round = 1; round <= 6; round += 1) {
+      const heading = page.getByRole("heading", { level: 1 });
+      await expect(heading).toBeVisible({ timeout: 15_000 });
+      const prompt = await heading.innerText();
+      const colour = prompt.match(/find the (\w+)/i)?.[1] ?? "";
+      const label = colour.charAt(0).toUpperCase() + colour.slice(1);
+      await page.getByRole("button", { name: label, exact: true }).click();
+      await page.waitForTimeout(1300);
+      if ((await page.getByText(/Accuracy/).count()) > 0) break;
     }
 
-    await expect(page.getByRole("button", { name: /Play again/ })).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByText(/Accuracy/)).toBeVisible();
+    await expect(page.getByText(/Accuracy/)).toBeVisible({ timeout: 20_000 });
 
     // Back on the dashboard the total has moved.
     await page.goto("/dashboard");

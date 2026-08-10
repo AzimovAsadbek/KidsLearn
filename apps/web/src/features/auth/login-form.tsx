@@ -32,7 +32,7 @@ export function LoginForm() {
     event.preventDefault();
     const nextErrors: typeof errors = {};
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) nextErrors.email = "Enter a valid email address.";
-    if (password.length < 6) nextErrors.password = "Passwords are at least 6 characters.";
+    if (password.length < 6) nextErrors.password = t("auth.passwordMin6");
     setErrors(nextErrors);
     setFormError(null);
     if (Object.keys(nextErrors).length > 0) return;
@@ -95,7 +95,7 @@ export function LoginForm() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-label={showPassword ? t("auth.hidePassword") : t("auth.showPassword")}
                   className="rounded-xs p-0.5 hover:text-content"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -106,7 +106,7 @@ export function LoginForm() {
         </Field>
 
         <div className="flex items-center justify-between gap-3">
-          <Checkbox label="Keep me signed in" defaultChecked />
+          <Checkbox label={t("auth.keepSignedIn")} defaultChecked />
           <Link href="/forgot-password" className="t-body-sm font-semibold text-primary hover:underline">
             {t("auth.forgot")}
           </Link>
