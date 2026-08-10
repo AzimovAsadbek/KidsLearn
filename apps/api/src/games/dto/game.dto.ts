@@ -83,6 +83,16 @@ export class AttemptAnswerDto {
   timeMs?: number;
 }
 
+export class GradeAnswerDto {
+  @ApiProperty({ format: "uuid" })
+  @IsUUID()
+  questionId!: string;
+
+  @ApiProperty({ format: "uuid" })
+  @IsUUID()
+  selectedOptionId!: string;
+}
+
 export class BoardResultDto {
   @ApiProperty()
   @Type(() => Number)

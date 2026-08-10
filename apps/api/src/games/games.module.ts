@@ -9,6 +9,7 @@ import {
   GameQueryDto,
   GameResponse,
   GameSessionResponse,
+  GradeAnswerDto,
   StartSessionDto,
   SubmitAttemptDto,
 } from "./dto/game.dto";
@@ -51,6 +52,21 @@ export class GamesController {
     @Body() dto: StartSessionDto,
   ) {
     return this.games.startSession(user, idOrSlug, dto);
+  }
+
+  @Post("sessions/:sessionId/answers")
+  @ApiOperation({
+    summary: "Grade one answer",
+    description:
+      "Returns whether the pick was right, plus the correct option so the UI can show it. The answer key never leaves the server before the child has guessed.",
+  })
+  @ApiParam({ name: "sessionId", format: "uuid" })
+  async gradeAnswer(
+    @CurrentUser() user: RequestUser,
+    @Param("sessionId") sessionId: string,
+    @Body() dto: GradeAnswerDto,
+  ) {
+    return this.games.gradeAnswer(user, sessionId, dto.questionId, dto.selectedOptionId);
   }
 
   @Post("attempts")

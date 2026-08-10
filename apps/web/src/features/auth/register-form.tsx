@@ -4,13 +4,17 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Lock, Mail, User } from "lucide-react";
 import { useT } from "@/i18n/provider";
+import { useSession } from "@/components/providers/session-provider";
+import { ApiError } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Field, Input } from "@/components/ui/field";
-import { AuthFooterLink, AuthHeading, PasswordStrength, SocialRow } from "./auth-parts";
+import { AuthFooterLink, AuthHeading, FormAlert, PasswordStrength, SocialRow } from "./auth-parts";
 
 export function RegisterForm() {
   const t = useT();
   const router = useRouter();
+  const { register } = useSession();
+  const [formError, setFormError] = useState<string | null>(null);
 
   const [values, setValues] = useState({ name: "", email: "", password: "", confirm: "" });
   const [accepted, setAccepted] = useState(false);
@@ -33,14 +37,38 @@ export function RegisterForm() {
     if (Object.keys(next).length > 0) return;
 
     setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    // A fresh account has no children yet, so onboarding starts on "add child".
-    router.push("/children?welcome=1");
+    setFormError(null);
+    try {
+      await register({ name: values.name, email: values.email, password: values.password });
+      // A fresh account has no children yet, so onboarding starts on "add child".
+      router.replace("/children?add=1&welcome=1");
+    } catch (error) {
+      setLoading(false);
+      if (error instanceof ApiError) {
+        if (error.code === "EMAIL_TAKEN") {
+          setErrors({ email: "An account with that email already exists." });
+          return;
+        }
+        if (error.details) {
+          setErrors({
+            name: error.details.name?.[0],
+            email: error.details.email?.[0],
+            password: error.details.password?.[0],
+          });
+          return;
+        }
+        setFormError(error.message);
+        return;
+      }
+      setFormError("We couldn't reach the server. Check your connection and try again.");
+    }
   }
 
   return (
     <div>
       <AuthHeading title={t("auth.createTitle")} subtitle={t("auth.createSubtitle")} />
+
+      {formError ? <FormAlert tone="danger">{formError}</FormAlert> : null}
 
       <form onSubmit={onSubmit} noValidate className="space-y-4">
         <Field label={t("auth.fullName")} error={errors.name} required>

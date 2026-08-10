@@ -168,6 +168,41 @@ export class GamesService {
   }
 
   /**
+   * Grades a single answer so the child gets immediate feedback.
+   *
+   * This is what keeps the answer key on the server: the client learns whether
+   * a pick was right only after making it, and learns the right answer only
+   * once it has guessed. The attempt is still re-graded in full on submit.
+   */
+  async gradeAnswer(
+    user: RequestUser,
+    sessionId: string,
+    questionId: string,
+    selectedOptionId: string,
+  ): Promise<{ correct: boolean; correctOptionId: string }> {
+    const session = await this.prisma.gameSession.findUnique({ where: { id: sessionId } });
+    if (!session) throw AppException.notFound("That game session has expired. Start the game again.");
+    await this.childAccess.assertAccess(user, session.childId);
+
+    if (!session.questionIds.includes(questionId)) {
+      throw AppException.badRequest("That question isn't part of this session.");
+    }
+
+    const options = await this.prisma.gameQuestionOption.findMany({
+      where: { questionId },
+      select: { id: true, isCorrect: true },
+    });
+
+    const correctOption = options.find((option) => option.isCorrect);
+    const chosen = options.find((option) => option.id === selectedOptionId);
+
+    return {
+      correct: Boolean(chosen?.isCorrect),
+      correctOptionId: correctOption?.id ?? "",
+    };
+  }
+
+  /**
    * Grades and records an attempt.
    *
    * `clientAttemptId` is a unique column, so a retry, a double-tap or an

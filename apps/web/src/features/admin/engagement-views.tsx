@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Plus, Send } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
-import { toneStyles } from "@/lib/tone";
+import { toneStyles, type Tone } from "@/lib/tone";
 import { useI18n, useT } from "@/i18n/provider";
+import type { LeaderboardPeriod } from "@kidslearn/types";
 import type { Achievement, Certificate, Reward } from "@/types";
 import { achievements, certificates, rewards } from "@/data/rewards";
-import { buildLeaderboard } from "@/data/analytics";
 import { getChild } from "@/data/children";
 import { useAppStore } from "@/store/app-store";
 import { PageHeading } from "@/components/layout/app-shell";
@@ -19,7 +20,8 @@ import { StatCard } from "@/components/ui/stat-card";
 import { Field, Input, Select, Textarea } from "@/components/ui/field";
 import { Tabs } from "@/components/ui/tabs";
 import { LeaderboardList } from "@/features/rewards/leaderboard-list";
-import { EmptyState } from "@/components/ui/states";
+import { fetchLeaderboard, queryKeys } from "@/lib/api/queries";
+import { EmptyState, SkeletonCard } from "@/components/ui/states";
 
 export function AchievementsAdminView() {
   const t = useT();
@@ -33,7 +35,7 @@ export function AchievementsAdminView() {
       sortValue: (row) => row.title,
       cell: (row) => (
         <div className="flex items-center gap-3">
-          <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-full text-xl", toneStyles[row.tone].soft)} aria-hidden>
+          <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-full text-xl", toneStyles[row.tone as Tone].soft)} aria-hidden>
             {row.glyph}
           </span>
           <div className="min-w-0">
@@ -54,7 +56,7 @@ export function AchievementsAdminView() {
       cell: (row) => (
         <span className="inline-flex items-center gap-2">
           <span className="hidden h-1.5 w-16 overflow-hidden rounded-full bg-surface-muted lg:block">
-            <span className={cn("block h-full rounded-full", toneStyles[row.tone].solid)} style={{ width: `${row.progress}%` }} />
+            <span className={cn("block h-full rounded-full", toneStyles[row.tone as Tone].solid)} style={{ width: `${row.progress}%` }} />
           </span>
           <span className="font-semibold tabular-nums text-content">{row.progress}%</span>
         </span>
@@ -102,7 +104,7 @@ export function RewardsAdminView() {
       sortValue: (row) => row.title,
       cell: (row) => (
         <div className="flex items-center gap-3">
-          <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-sm text-xl", toneStyles[row.tone].soft)} aria-hidden>
+          <span className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-sm text-xl", toneStyles[row.tone as Tone].soft)} aria-hidden>
             {row.glyph}
           </span>
           <div className="min-w-0">
@@ -215,8 +217,12 @@ export function NotificationsAdminView() {
 
 export function LeaderboardAdminView() {
   const t = useT();
-  const [period, setPeriod] = useState<"weekly" | "monthly" | "all">("weekly");
-  const entries = buildLeaderboard("", period === "weekly" ? 1 : period === "monthly" ? 3.4 : 9.2);
+  const [period, setPeriod] = useState<LeaderboardPeriod>("WEEKLY");
+  const { data, isLoading } = useQuery({
+    queryKey: queryKeys.leaderboard(period),
+    queryFn: () => fetchLeaderboard(period),
+  });
+  const entries = data?.entries ?? [];
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-5">
@@ -231,16 +237,16 @@ export function LeaderboardAdminView() {
         value={period}
         onChange={setPeriod}
         items={[
-          { id: "weekly", label: t("common.weekly") },
-          { id: "monthly", label: t("common.monthly") },
-          { id: "all", label: t("common.allTime") },
+          { id: "WEEKLY", label: t("common.weekly") },
+          { id: "MONTHLY", label: t("common.monthly") },
+          { id: "ALL_TIME", label: t("common.allTime") },
         ]}
       />
 
       <Card>
         <CardHeader title="Current standings" subtitle={`${entries.length} learners`} />
         <CardBody>
-          <LeaderboardList entries={entries} />
+          {isLoading ? <SkeletonCard /> : <LeaderboardList entries={entries} />}
         </CardBody>
       </Card>
     </div>

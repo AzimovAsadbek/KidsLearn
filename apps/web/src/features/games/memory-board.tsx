@@ -3,26 +3,31 @@
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/provider";
-import { buildMemoryDeck } from "@/data/games";
 import { useSound } from "@/hooks/use-sound";
 
-const PAIRS = 6;
+export interface MemoryCard {
+  id: string;
+  glyph: string;
+  matchKey: string;
+}
 
 /**
- * Memory. Cards flip with a 3D transform, mismatches turn back after a beat,
- * and every card keeps an accessible name so the board is playable with a
+ * Memory. The deck is dealt by the API so the board is reproducible from a
+ * session id. Cards flip with a 3D transform, mismatches turn back after a
+ * beat, and every card keeps an accessible name so the board is playable with a
  * screen reader as well as by sight.
  */
 export function MemoryBoard({
-  seed,
+  cards,
   onComplete,
 }: {
-  seed: number;
+  cards: MemoryCard[];
   onComplete: (pairs: number, flips: number) => void;
 }) {
   const t = useT();
   const play = useSound();
-  const deck = useMemo(() => buildMemoryDeck(PAIRS, seed), [seed]);
+  const deck = useMemo(() => cards, [cards]);
+  const PAIRS = deck.length / 2;
 
   const [flipped, setFlipped] = useState<string[]>([]);
   const [matched, setMatched] = useState<string[]>([]);
@@ -51,10 +56,10 @@ export function MemoryBoard({
   }, [flipped, deck, play]);
 
   useEffect(() => {
-    if (matched.length === 0 || matched.length < deck.length) return;
+    if (deck.length === 0 || matched.length < deck.length) return;
     const timer = window.setTimeout(() => onComplete(PAIRS, flips), 500);
     return () => window.clearTimeout(timer);
-  }, [matched, deck.length, flips, onComplete]);
+  }, [matched, deck.length, flips, onComplete, PAIRS]);
 
   function flip(id: string) {
     if (locked || flipped.includes(id) || matched.includes(id)) return;
@@ -83,7 +88,7 @@ export function MemoryBoard({
               type="button"
               onClick={() => flip(card.id)}
               disabled={isMatched}
-              aria-label={isUp ? card.label : "Face-down card"}
+              aria-label={isUp ? card.glyph : "Face-down card"}
               aria-pressed={isUp}
               className="group relative aspect-square [perspective:900px]"
             >

@@ -2,62 +2,83 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Download, Pencil } from "lucide-react";
-import { calculateAge, cn, formatDate, formatDuration, formatRelativeTime } from "@/lib/utils";
-import { toneStyles } from "@/lib/tone";
+import { cn, formatDate, formatDuration, formatRelativeTime } from "@/lib/utils";
+import { toneStyles, type Tone } from "@/lib/tone";
 import { useI18n, useT } from "@/i18n/provider";
-import type { Child } from "@/types";
-import { NOW } from "@/data/children";
-import { activityFor } from "@/data/notifications";
-import { achievements } from "@/data/rewards";
-import { certificatesFor } from "@/data/rewards";
+import type { ChildDto } from "@kidslearn/types";
 import {
-  buildLeaderboard,
-  consistencyGrid,
-  recommendationFor,
-  subjectStrength,
-  weeklyAccuracy,
-  weeklyMinutes,
-  xpGrowth,
-} from "@/data/analytics";
+  fetchAchievements,
+  fetchActivity,
+  fetchCertificates,
+  fetchLeaderboard,
+  fetchRecommendation,
+  fetchStatistics,
+  queryKeys,
+} from "@/lib/api/queries";
 import { Card, CardBody, CardHeader, ChartCard } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Button, ButtonLink } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button";
 import { Tabs } from "@/components/ui/tabs";
 import { ProgressRing, XpBar } from "@/components/ui/progress";
 import { AreaChart } from "@/components/charts/area-chart";
 import { HeatGrid } from "@/components/charts/heat-grid";
+import { EmptyState, SkeletonCard } from "@/components/ui/states";
 import { AchievementCard } from "@/features/rewards/achievement-card";
 import { LeaderboardList } from "@/features/rewards/leaderboard-list";
-import { ActivityFeed, AiRecommendationCard, SubjectStrengthCard } from "./dashboard-widgets";
 import { VoiceAssistantCard } from "@/features/voice/voice-assistant-card";
+import { ActivityFeed, AiRecommendationCard, SubjectStrengthCard } from "./dashboard-widgets";
 
 type TabId = "overview" | "progress" | "achievements" | "activity" | "statistics";
 
-export function ChildProfileView({ child }: { child: Child }) {
+/** Everything on this page is fetched per child; nothing is derived locally. */
+export function ChildProfileView({ child }: { child: ChildDto }) {
   const t = useT();
   const { intlLocale } = useI18n();
   const [tab, setTab] = useState<TabId>("overview");
 
-  const age = calculateAge(child.birthDate, NOW);
-  const unlocked = achievements.filter((a) => a.progress >= 100);
-  const certificates = certificatesFor(child.id);
-  const tone = child.avatar.tone;
+  const statistics = useQuery({
+    queryKey: queryKeys.statistics(child.id, "month"),
+    queryFn: () => fetchStatistics(child.id, "month"),
+  });
+  const achievements = useQuery({
+    queryKey: queryKeys.achievements(child.id),
+    queryFn: () => fetchAchievements(child.id),
+  });
+  const activity = useQuery({
+    queryKey: queryKeys.activity(child.id),
+    queryFn: () => fetchActivity(child.id, 25),
+  });
+  const recommendation = useQuery({
+    queryKey: queryKeys.recommendation(child.id),
+    queryFn: () => fetchRecommendation(child.id),
+  });
+  const certificates = useQuery({
+    queryKey: queryKeys.certificates(child.id),
+    queryFn: () => fetchCertificates(child.id),
+  });
+  const leaderboard = useQuery({
+    queryKey: queryKeys.leaderboard("WEEKLY", child.id),
+    queryFn: () => fetchLeaderboard("WEEKLY", child.id),
+  });
+
+  const progress = child.progress;
+  const unlocked = (achievements.data ?? []).filter((achievement) => achievement.unlockedAt);
+  const tone = child.avatarTone as Tone;
+  const programmePercent = Math.min(100, Math.round(((progress?.lessonsCompleted ?? 0) / 40) * 100));
 
   return (
     <div className="mx-auto w-full max-w-[95rem] space-y-5">
-      <Link
-        href="/children"
-        className="t-label inline-flex items-center gap-1.5 text-content-secondary hover:text-content"
-      >
+      <Link href="/children" className="t-label inline-flex items-center gap-1.5 text-content-secondary hover:text-content">
         <ArrowLeft className="h-4 w-4" aria-hidden />
         {t("parent.childrenTitle")}
       </Link>
 
       {/* ---- Hero -------------------------------------------------------- */}
       <Card className="overflow-hidden">
-        <div className={cn("relative h-32 sm:h-40", toneStyles[tone].gradient)}>
+        <div className={cn("relative h-32 sm:h-40", toneStyles[tone]?.gradient ?? toneStyles.brand.gradient)}>
           <div
             className="absolute inset-0 opacity-35"
             aria-hidden
@@ -71,35 +92,37 @@ export function ChildProfileView({ child }: { child: Child }) {
         <CardBody className="pt-0">
           <div className="flex flex-wrap items-end gap-5">
             <div className="-mt-12 sm:-mt-14">
-              <Avatar spec={child.avatar} size="2xl" className="ring-4 ring-surface shadow-card" />
+              <Avatar spec={{ glyph: child.avatarGlyph, tone }} size="2xl" className="ring-4 ring-surface shadow-card" />
             </div>
 
             <div className="min-w-0 flex-1 pb-1">
               <h1 className="t-h1 text-content">{child.name}</h1>
               <p className="t-body-sm mt-0.5 text-content-secondary">
-                {age} years old · Member since {formatDate(child.joinedAt, intlLocale)}
+                {child.age} years old · Member since {formatDate(child.createdAt, intlLocale)}
               </p>
               <div className="mt-2.5 flex flex-wrap gap-2">
-                <Badge tone="sun">🏅 Gold learner</Badge>
-                <Badge tone="brand">Level {child.level}</Badge>
-                <Badge tone="coral">🔥 {child.streakDays}-day streak</Badge>
-                <Badge tone="mint">{child.accuracy}% accuracy</Badge>
+                <Badge tone="brand">Level {progress?.level ?? 1}</Badge>
+                <Badge tone="coral">🔥 {progress?.currentStreak ?? 0}-day streak</Badge>
+                <Badge tone="mint">{progress?.accuracy ?? 0}% accuracy</Badge>
+                <Badge tone="sky">Ages {child.ageCategory.replace("AGE_", "").replace("_", "–")}</Badge>
               </div>
             </div>
 
             <div className="flex gap-2 pb-1">
-              <ButtonLink href="/kids" variant="primary" size="md">
+              <ButtonLink href={`/kids?child=${child.id}`} variant="primary" size="md">
                 {t("nav.kidMode")}
               </ButtonLink>
-              <Button variant="secondary" size="md" leadingIcon={<Pencil className="h-4 w-4" />}>
+              <ButtonLink href="/settings" variant="secondary" size="md" leadingIcon={<Pencil className="h-4 w-4" />}>
                 {t("common.edit")}
-              </Button>
+              </ButtonLink>
             </div>
           </div>
 
-          <div className="mt-6">
-            <XpBar xp={child.xp} xpToNext={child.xpToNextLevel} level={child.level} />
-          </div>
+          {progress ? (
+            <div className="mt-6">
+              <XpBar xp={progress.xpIntoLevel} xpToNext={progress.xpForNextLevel} level={progress.level} />
+            </div>
+          ) : null}
         </CardBody>
       </Card>
 
@@ -116,29 +139,43 @@ export function ChildProfileView({ child }: { child: Child }) {
         ]}
       />
 
-      {/* ---- Panels ------------------------------------------------------ */}
       <div className="grid gap-5 xl:grid-cols-[1.5fr_1fr]">
         <div className="space-y-5">
           {tab === "overview" ? (
             <>
               <Card>
-                <CardHeader title="Learning progress" subtitle="Against this term's plan" />
+                <CardHeader title="Learning progress" subtitle="Against the Early Learning Program" />
                 <CardBody className="flex flex-wrap items-center gap-6">
-                  <ProgressRing value={75} size={140} thickness={14} tone={tone} label="75% of the programme complete">
+                  <ProgressRing
+                    value={programmePercent}
+                    size={140}
+                    thickness={14}
+                    tone={tone}
+                    label={`${programmePercent}% of the programme complete`}
+                  >
                     <div>
-                      <p className="t-h1 font-extrabold text-content tabular-nums">75%</p>
-                      <p className="t-caption font-semibold text-content-secondary">Great job!</p>
+                      <p className="t-h1 font-extrabold text-content tabular-nums">{programmePercent}%</p>
+                      <p className="t-caption font-semibold text-content-secondary">
+                        {programmePercent >= 75 ? "Great job!" : "Keep going"}
+                      </p>
                     </div>
                   </ProgressRing>
 
                   <dl className="min-w-52 flex-1 space-y-3">
                     {[
-                      { glyph: "📗", label: t("parent.lessonsCompleted"), value: child.lessonsCompleted },
-                      { glyph: "🎮", label: "Games played", value: child.gamesPlayed },
-                      { glyph: "⭐", label: t("parent.starsEarned"), value: child.stars },
-                      { glyph: "⏱️", label: "Time spent", value: formatDuration(child.minutesLearned) },
+                      { glyph: "📗", label: t("parent.lessonsCompleted"), value: progress?.lessonsCompleted ?? 0 },
+                      { glyph: "🎮", label: "Games played", value: progress?.gamesPlayed ?? 0 },
+                      { glyph: "⭐", label: t("parent.starsEarned"), value: progress?.stars ?? 0 },
+                      {
+                        glyph: "⏱️",
+                        label: "Time spent",
+                        value: formatDuration(Math.round((progress?.learningSeconds ?? 0) / 60)),
+                      },
                     ].map((row) => (
-                      <div key={row.label} className="flex items-center justify-between gap-4 border-b border-border pb-2.5 last:border-0 last:pb-0">
+                      <div
+                        key={row.label}
+                        className="flex items-center justify-between gap-4 border-b border-border pb-2.5 last:border-0 last:pb-0"
+                      >
                         <dt className="t-body-sm flex items-center gap-2 text-content-secondary">
                           <span aria-hidden>{row.glyph}</span>
                           {row.label}
@@ -159,10 +196,22 @@ export function ChildProfileView({ child }: { child: Child }) {
                     </Link>
                   }
                 />
-                <CardBody className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {unlocked.slice(0, 4).map((achievement) => (
-                    <AchievementCard key={achievement.id} achievement={achievement} compact />
-                  ))}
+                <CardBody>
+                  {achievements.isLoading ? (
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      {[0, 1, 2, 3].map((i) => (
+                        <div key={i} className="shimmer h-32 rounded-xl" />
+                      ))}
+                    </div>
+                  ) : unlocked.length === 0 ? (
+                    <EmptyState compact glyph="🏅" title="No medals yet" body="The first unlocks after one lesson." />
+                  ) : (
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      {unlocked.slice(0, 4).map((achievement) => (
+                        <AchievementCard key={achievement.id} achievement={achievement} compact />
+                      ))}
+                    </div>
+                  )}
                 </CardBody>
               </Card>
             </>
@@ -171,13 +220,18 @@ export function ChildProfileView({ child }: { child: Child }) {
           {tab === "progress" ? (
             <>
               <ChartCard title={t("parent.weeklyProgress")} subtitle="Minutes learned per day">
-                <AreaChart points={weeklyMinutes[child.id] ?? []} tone={tone} valueSuffix=" min" ariaLabel="Weekly minutes" />
+                <AreaChart
+                  points={statistics.data?.series.learningMinutes ?? []}
+                  tone={tone}
+                  valueSuffix=" min"
+                  ariaLabel="Learning minutes"
+                />
               </ChartCard>
-              <SubjectStrengthCard strengths={subjectStrength[child.id] ?? []} />
+              <SubjectStrengthCard strengths={statistics.data?.subjectStrength ?? []} loading={statistics.isLoading} />
               <Card>
                 <CardHeader title="Learning consistency" subtitle="Last 5 weeks" />
                 <CardBody>
-                  <HeatGrid values={consistencyGrid[child.id] ?? []} />
+                  <HeatGrid values={(statistics.data?.consistency ?? []).map((day) => day.level)} />
                 </CardBody>
               </Card>
             </>
@@ -185,9 +239,12 @@ export function ChildProfileView({ child }: { child: Child }) {
 
           {tab === "achievements" ? (
             <Card>
-              <CardHeader title={t("nav.achievements")} subtitle={`${unlocked.length} of ${achievements.length} unlocked`} />
+              <CardHeader
+                title={t("nav.achievements")}
+                subtitle={`${unlocked.length} of ${achievements.data?.length ?? 0} unlocked`}
+              />
               <CardBody className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {achievements.map((achievement) => (
+                {(achievements.data ?? []).map((achievement) => (
                   <AchievementCard key={achievement.id} achievement={achievement} />
                 ))}
               </CardBody>
@@ -196,19 +253,25 @@ export function ChildProfileView({ child }: { child: Child }) {
 
           {tab === "activity" ? (
             <ActivityFeed
-              events={activityFor(child.id)}
+              events={activity.data?.items ?? []}
               title="All activity"
               emptyLabel="No activity recorded yet."
+              loading={activity.isLoading}
             />
           ) : null}
 
           {tab === "statistics" ? (
             <>
               <ChartCard title="Accuracy trend" subtitle="Correct answers per day">
-                <AreaChart points={weeklyAccuracy[child.id] ?? []} tone="mint" valueSuffix="%" ariaLabel="Accuracy trend" />
+                <AreaChart
+                  points={statistics.data?.series.accuracy ?? []}
+                  tone="mint"
+                  valueSuffix="%"
+                  ariaLabel="Accuracy trend"
+                />
               </ChartCard>
-              <ChartCard title="XP growth" subtitle="Cumulative experience this year">
-                <AreaChart points={xpGrowth[child.id] ?? []} tone="brand" valueSuffix=" XP" ariaLabel="XP growth" />
+              <ChartCard title="XP earned" subtitle="Per day">
+                <AreaChart points={statistics.data?.series.xp ?? []} tone="brand" valueSuffix=" XP" ariaLabel="XP earned" />
               </ChartCard>
             </>
           ) : null}
@@ -216,7 +279,12 @@ export function ChildProfileView({ child }: { child: Child }) {
 
         {/* ---- Right rail ------------------------------------------------ */}
         <div className="space-y-5">
-          <AiRecommendationCard recommendation={recommendationFor(child.id)} childName={child.name} compact />
+          <AiRecommendationCard
+            recommendation={recommendation.data ?? null}
+            childName={child.name}
+            compact
+            loading={recommendation.isLoading}
+          />
 
           <Card>
             <CardHeader
@@ -229,7 +297,11 @@ export function ChildProfileView({ child }: { child: Child }) {
               }
             />
             <CardBody>
-              <LeaderboardList entries={buildLeaderboard(child.id).slice(0, 5)} compact />
+              {leaderboard.isLoading ? (
+                <SkeletonCard />
+              ) : (
+                <LeaderboardList entries={(leaderboard.data?.entries ?? []).slice(0, 5)} compact />
+              )}
             </CardBody>
           </Card>
 
@@ -245,24 +317,29 @@ export function ChildProfileView({ child }: { child: Child }) {
               }
             />
             <CardBody className="space-y-2.5">
-              {certificates.length === 0 ? (
+              {certificates.isLoading ? (
+                <div className="shimmer h-16 rounded-lg" />
+              ) : (certificates.data ?? []).length === 0 ? (
                 <p className="t-body-sm py-4 text-center text-content-secondary">
                   No certificates yet — they arrive at each programme milestone.
                 </p>
               ) : (
-                certificates.map((certificate) => (
+                (certificates.data ?? []).map((certificate) => (
                   <Link
                     key={certificate.id}
                     href={`/certificates/${certificate.id}`}
                     className="flex items-center gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-surface-muted"
                   >
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-sun-soft text-xl dark:bg-sun-core/15" aria-hidden>
+                    <span
+                      className="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-sun-soft text-xl dark:bg-sun-core/15"
+                      aria-hidden
+                    >
                       📜
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="t-body-sm block truncate font-semibold text-content">{certificate.title}</span>
                       <span className="t-caption block text-content-secondary">
-                        {formatRelativeTime(certificate.issuedAt, NOW, intlLocale)}
+                        {formatRelativeTime(certificate.issuedAt, new Date(), intlLocale)}
                       </span>
                     </span>
                     <Download className="h-4 w-4 shrink-0 text-content-tertiary" aria-hidden />

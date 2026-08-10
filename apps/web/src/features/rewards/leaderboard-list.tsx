@@ -1,7 +1,8 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import type { LeaderboardEntry } from "@/types";
+import type { LeaderboardEntryDto } from "@kidslearn/types";
+import type { Tone } from "@/lib/tone";
 import { Avatar } from "@/components/ui/avatar";
 
 const MEDALS = ["🥇", "🥈", "🥉"];
@@ -15,7 +16,7 @@ export function LeaderboardList({
   entries,
   compact = false,
 }: {
-  entries: LeaderboardEntry[];
+  entries: LeaderboardEntryDto[];
   compact?: boolean;
 }) {
   return (
@@ -40,7 +41,7 @@ export function LeaderboardList({
               {entry.rank <= 3 ? MEDALS[entry.rank - 1] : entry.rank}
             </span>
 
-            <Avatar spec={entry.avatar} size={compact ? "xs" : "sm"} />
+            <Avatar spec={{ glyph: entry.avatarGlyph, tone: entry.avatarTone as Tone }} size={compact ? "xs" : "sm"} />
 
             <span className="min-w-0 flex-1">
               <span className="t-body-sm block truncate font-semibold text-content">
@@ -68,7 +69,7 @@ export function LeaderboardList({
 }
 
 /** Podium header for the full leaderboard page. */
-export function LeaderboardPodium({ entries }: { entries: LeaderboardEntry[] }) {
+export function LeaderboardPodium({ entries }: { entries: LeaderboardEntryDto[] }) {
   const [first, second, third] = entries;
   if (!first) return null;
 
@@ -87,7 +88,7 @@ export function LeaderboardPodium({ entries }: { entries: LeaderboardEntry[] }) 
               {MEDALS[place - 1]}
             </span>
             <Avatar
-              spec={entry.avatar}
+              spec={{ glyph: entry.avatarGlyph, tone: entry.avatarTone as Tone }}
               size={place === 1 ? "xl" : "lg"}
               className={cn("ring-4", entry.isCurrentChild ? "ring-primary" : "ring-surface")}
             />

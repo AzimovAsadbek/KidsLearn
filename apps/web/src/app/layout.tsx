@@ -7,9 +7,12 @@ import { DEFAULT_LOCALE, LOCALE_COOKIE, isLocale } from "@/i18n/config";
 import { I18nProvider } from "@/i18n/provider";
 import { THEME_COOKIE, isThemePreference, themeInitScript } from "@/lib/theme";
 import { ThemeProvider } from "@/components/providers/theme-provider";
+import { QueryProvider } from "@/components/providers/query-provider";
+import { SessionProvider } from "@/components/providers/session-provider";
 import { ToastViewport } from "@/components/ui/toast";
 import { InstallPrompt } from "@/components/platform/install-prompt";
 import { ServiceWorkerRegistrar } from "@/components/platform/service-worker";
+import { OfflineSync } from "@/components/platform/offline-sync";
 
 /** UI face — highly legible at small sizes and it carries tabular numerals. */
 const jakarta = Plus_Jakarta_Sans({
@@ -66,13 +69,19 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-dvh antialiased">
         <ThemeProvider initialPreference={themePreference}>
           <I18nProvider initialLocale={locale}>
-            <a href="#main" className="skip-link">
-              Skip to content
-            </a>
-            {children}
-            <ToastViewport />
-            <InstallPrompt />
-            <ServiceWorkerRegistrar />
+            {/* Query sits above Session because signing in invalidates the cache. */}
+            <QueryProvider>
+              <SessionProvider>
+                <a href="#main" className="skip-link">
+                  Skip to content
+                </a>
+                {children}
+                <ToastViewport />
+                <InstallPrompt />
+                <ServiceWorkerRegistrar />
+                <OfflineSync />
+              </SessionProvider>
+            </QueryProvider>
           </I18nProvider>
         </ThemeProvider>
       </body>

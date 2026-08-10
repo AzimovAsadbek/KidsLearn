@@ -1,24 +1,28 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import { useT } from "@/i18n/provider";
+import { useSession } from "@/components/providers/session-provider";
+import { ApiError } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Field, Input } from "@/components/ui/field";
 import { AuthFooterLink, AuthHeading, FormAlert, SocialRow } from "./auth-parts";
 
 /**
- * Demo credentials are prefilled so the flow can be walked end-to-end. Typing
- * an address containing "fail" exercises the error state.
+ * Signs in against the real API. The seeded development account is prefilled so
+ * a fresh checkout can be walked end-to-end without creating one first.
  */
 export function LoginForm() {
   const t = useT();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { signIn } = useSession();
 
-  const [email, setEmail] = useState("asadbek@kidslearn.app");
-  const [password, setPassword] = useState("kidslearn");
+  const [email, setEmail] = useState("parent@kidslearn.app");
+  const [password, setPassword] = useState("kidslearn2026");
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -34,14 +38,23 @@ export function LoginForm() {
     if (Object.keys(nextErrors).length > 0) return;
 
     setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 750));
-
-    if (email.includes("fail")) {
+    try {
+      const user = await signIn(email, password);
+      // Honour ?next= when the guard bounced us here, otherwise send each role
+      // to the surface it actually uses.
+      const next = searchParams.get("next");
+      router.replace(next && next.startsWith("/") ? next : user.role === "ADMIN" ? "/admin" : "/dashboard");
+    } catch (error) {
       setLoading(false);
-      setFormError("We couldn't find an account with those details.");
-      return;
+      if (error instanceof ApiError) {
+        setFormError(error.message);
+        if (error.details) {
+          setErrors({ email: error.details.email?.[0], password: error.details.password?.[0] });
+        }
+        return;
+      }
+      setFormError("We couldn't reach the server. Check your connection and try again.");
     }
-    router.push("/dashboard");
   }
 
   return (

@@ -2,24 +2,24 @@
 
 import { Lock } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
-import { toneStyles } from "@/lib/tone";
+import { toneStyles, type Tone } from "@/lib/tone";
 import { useI18n } from "@/i18n/provider";
-import type { Achievement, MedalTier, Reward } from "@/types";
+import type { AchievementDto, MedalTier, RewardDto } from "@kidslearn/types";
 import { ProgressBar } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 
 const TIER_RING: Record<MedalTier, string> = {
-  bronze: "from-tangerine-core to-tangerine-deep",
-  silver: "from-slate-300 to-slate-400",
-  gold: "from-sun-core to-tangerine-core",
-  diamond: "from-lagoon-core to-sky-core",
+  BRONZE: "from-tangerine-core to-tangerine-deep",
+  SILVER: "from-slate-300 to-slate-400",
+  GOLD: "from-sun-core to-tangerine-core",
+  DIAMOND: "from-lagoon-core to-sky-core",
 };
 
 const TIER_LABEL: Record<MedalTier, string> = {
-  bronze: "Bronze",
-  silver: "Silver",
-  gold: "Gold",
-  diamond: "Diamond",
+  BRONZE: "Bronze",
+  SILVER: "Silver",
+  GOLD: "Gold",
+  DIAMOND: "Diamond",
 };
 
 /**
@@ -30,11 +30,11 @@ export function AchievementCard({
   achievement,
   compact = false,
 }: {
-  achievement: Achievement;
+  achievement: AchievementDto;
   compact?: boolean;
 }) {
   const { intlLocale } = useI18n();
-  const unlocked = achievement.progress >= 100;
+  const unlocked = achievement.unlockedAt !== null;
 
   return (
     <div
@@ -86,7 +86,7 @@ export function AchievementCard({
         </p>
       ) : (
         <div className="mt-3 w-full">
-          <ProgressBar value={achievement.progress} tone={achievement.tone} size="sm" />
+          <ProgressBar value={achievement.progress} tone={achievement.tone as Tone} size="sm" />
           <p className="t-caption mt-1.5 font-semibold text-content-tertiary">
             Locked · {achievement.progress}% complete
           </p>
@@ -95,7 +95,7 @@ export function AchievementCard({
 
       {!compact ? (
         <span className="mt-3">
-          <Badge tone={unlocked ? achievement.tone : "sky"} size="sm">
+          <Badge tone={unlocked ? (achievement.tone as Tone) : "sky"} size="sm">
             +{achievement.xpReward} XP
           </Badge>
         </span>
@@ -105,19 +105,29 @@ export function AchievementCard({
 }
 
 /** Redeemable reward tile — shows the star price and whether it's claimed. */
-export function RewardCard({ reward, stars }: { reward: Reward; stars: number }) {
+export function RewardCard({
+  reward,
+  stars,
+  onClaim,
+  claiming,
+}: {
+  reward: RewardDto;
+  stars: number;
+  onClaim?: (rewardId: string) => void;
+  claiming?: boolean;
+}) {
   const affordable = stars >= reward.costStars;
 
   return (
     <div
       className={cn(
         "flex flex-col rounded-xl border p-4 transition-all duration-300",
-        reward.unlocked ? "border-border bg-surface shadow-soft" : "border-border bg-surface",
-        !reward.unlocked && !affordable && "opacity-70",
+        reward.claimed ? "border-border bg-surface shadow-soft" : "border-border bg-surface",
+        !reward.claimed && !affordable && "opacity-70",
       )}
     >
       <span
-        className={cn("grid h-14 w-14 place-items-center rounded-lg text-3xl", toneStyles[reward.tone].soft)}
+        className={cn("grid h-14 w-14 place-items-center rounded-lg text-3xl", toneStyles[reward.tone as Tone].soft)}
         aria-hidden
       >
         {reward.glyph}
@@ -130,14 +140,15 @@ export function RewardCard({ reward, stars }: { reward: Reward; stars: number })
           <span aria-hidden>⭐</span>
           {reward.costStars}
         </span>
-        {reward.unlocked ? (
+        {reward.claimed ? (
           <Badge tone="mint" size="sm">
             ✓ Claimed
           </Badge>
         ) : (
           <button
             type="button"
-            disabled={!affordable}
+            disabled={!affordable || claiming}
+            onClick={() => onClaim?.(reward.id)}
             className={cn(
               "t-label rounded-sm px-3 py-1.5 transition-colors",
               affordable

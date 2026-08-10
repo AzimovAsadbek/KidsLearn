@@ -2,9 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
-import { toneStyles } from "@/lib/tone";
+import { toneStyles, type Tone } from "@/lib/tone";
 import { useT } from "@/i18n/provider";
-import { buildPuzzle } from "@/data/games";
 import { useSound } from "@/hooks/use-sound";
 
 interface Piece {
@@ -13,23 +12,31 @@ interface Piece {
   slot: number;
 }
 
+export interface PuzzleBoardData {
+  title: string;
+  tone: string;
+  solution: string[];
+  tray: Piece[];
+}
+
 /**
  * Nine-tile picture puzzle. Drag-and-drop is the primary interaction, but every
  * piece is also a button: tap a piece, then tap a slot. Pointer-only puzzles are
  * unusable on assistive tech and frustrating for small hands.
  */
 export function PuzzleBoardView({
-  seed,
+  board,
   onComplete,
 }: {
-  seed: number;
+  board: PuzzleBoardData;
   onComplete: (placed: number, moves: number) => void;
 }) {
   const t = useT();
   const play = useSound();
-  const board = useMemo(() => buildPuzzle(seed), [seed]);
+  const tone = (toneStyles[board.tone as Tone] ?? toneStyles.sun).soft;
 
-  const [tray, setTray] = useState<Piece[]>(board.tray);
+  const initialTray = useMemo(() => board.tray, [board.tray]);
+  const [tray, setTray] = useState<Piece[]>(initialTray);
   const [slots, setSlots] = useState<Array<Piece | null>>(Array.from({ length: 9 }, () => null));
   const [heldId, setHeldId] = useState<string | null>(null);
   const [moves, setMoves] = useState(0);
@@ -79,7 +86,7 @@ export function PuzzleBoardView({
       <div
         className={cn(
           "mx-auto mt-6 grid aspect-square w-full max-w-sm grid-cols-3 gap-1.5 rounded-3xl border-4 border-border p-2 shadow-soft",
-          toneStyles[board.tone].soft,
+          tone,
         )}
       >
         {slots.map((piece, index) => (

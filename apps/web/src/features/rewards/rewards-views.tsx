@@ -1,67 +1,86 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { toneStyles } from "@/lib/tone";
+import { toneStyles, type Tone } from "@/lib/tone";
 import { useT } from "@/i18n/provider";
-import type { Achievement } from "@/types";
-import { useAppStore, useGains } from "@/store/app-store";
-import { getChild } from "@/data/children";
-import { achievements, medalTiers, rewards } from "@/data/rewards";
-import { buildLeaderboard } from "@/data/analytics";
+import type { AchievementDto, LeaderboardPeriod, MedalTier } from "@kidslearn/types";
+import { useChildContext } from "@/components/providers/child-provider";
+import { useAppStore } from "@/store/app-store";
+import { ApiError } from "@/lib/api/client";
+import {
+  claimReward,
+  fetchAchievements,
+  fetchLeaderboard,
+  fetchRewards,
+  queryKeys,
+} from "@/lib/api/queries";
 import { PageHeading } from "@/components/layout/app-shell";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { Tabs } from "@/components/ui/tabs";
 import { ProgressBar } from "@/components/ui/progress";
-import { EmptyState } from "@/components/ui/states";
+import { EmptyState, SkeletonCard } from "@/components/ui/states";
 import { AchievementCard, RewardCard } from "./achievement-card";
 import { LeaderboardList, LeaderboardPodium } from "./leaderboard-list";
 
+const MEDAL_TIERS: Array<{ tier: MedalTier; glyph: string; label: string; tone: Tone }> = [
+  { tier: "BRONZE", glyph: "🥉", label: "Bronze", tone: "tangerine" },
+  { tier: "SILVER", glyph: "🥈", label: "Silver", tone: "sky" },
+  { tier: "GOLD", glyph: "🥇", label: "Gold", tone: "sun" },
+  { tier: "DIAMOND", glyph: "💎", label: "Diamond", tone: "lagoon" },
+];
+
 /* --- Achievements -------------------------------------------------------- */
 
-type Category = Achievement["category"] | "all";
+type Category = AchievementDto["category"] | "all";
 
 export function AchievementsView() {
   const t = useT();
-  const childId = useAppStore((s) => s.selectedChildId);
-  const child = getChild(childId);
+  const { selectedChild } = useChildContext();
   const [category, setCategory] = useState<Category>("all");
 
-  const unlocked = achievements.filter((a) => a.progress >= 100);
+  const { data, isLoading } = useQuery({
+    queryKey: queryKeys.achievements(selectedChild?.id ?? "none"),
+    queryFn: () => fetchAchievements(selectedChild!.id),
+    enabled: Boolean(selectedChild?.id),
+  });
+
+  const achievements = useMemo(() => data ?? [], [data]);
+  const unlocked = achievements.filter((achievement) => achievement.unlockedAt);
   const filtered = useMemo(
     () => (category === "all" ? achievements : achievements.filter((a) => a.category === category)),
-    [category],
+    [achievements, category],
   );
+
+  if (!selectedChild) {
+    return <EmptyState glyph="👶" title="No child selected" body="Add a child to start collecting medals." />;
+  }
 
   return (
     <div className="mx-auto w-full max-w-[95rem] space-y-6">
       <PageHeading
         title={t("nav.achievements")}
-        subtitle={`${child.name} has unlocked ${unlocked.length} of ${achievements.length} achievements.`}
+        subtitle={`${selectedChild.name} has unlocked ${unlocked.length} of ${achievements.length} achievements.`}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard tone="sun" glyph="🏆" label={t("rewards.earned")} value={unlocked.length} />
         <StatCard tone="sky" glyph="🔒" label={t("rewards.locked")} value={achievements.length - unlocked.length} />
-        <StatCard
-          tone="grape"
-          glyph="⚡"
-          label="XP from achievements"
-          value={unlocked.reduce((sum, a) => sum + a.xpReward, 0)}
-        />
+        <StatCard tone="grape" glyph="⚡" label="XP from achievements" value={unlocked.reduce((sum, a) => sum + a.xpReward, 0)} />
         <StatCard
           tone="mint"
           glyph="📈"
           label="Collection"
-          value={`${Math.round((unlocked.length / achievements.length) * 100)}%`}
+          value={achievements.length > 0 ? `${Math.round((unlocked.length / achievements.length) * 100)}%` : "0%"}
         />
       </div>
 
       <Card>
         <CardHeader title="Medal tiers" subtitle="Each tier needs a deeper streak of consistent learning." />
         <CardBody className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {medalTiers.map((tier) => {
+          {MEDAL_TIERS.map((tier) => {
             const owned = unlocked.filter((a) => a.tier === tier.tier).length;
             const total = achievements.filter((a) => a.tier === tier.tier).length;
             return (
@@ -98,7 +117,13 @@ export function AchievementsView() {
         ]}
       />
 
-      {filtered.length === 0 ? (
+      {isLoading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+          {[0, 1, 2, 3, 4, 5].map((i) => (
+            <SkeletonCard key={i} className="h-48" />
+          ))}
+        </div>
+      ) : filtered.length === 0 ? (
         <EmptyState glyph="🏅" title={t("state.emptyTitle")} body={t("state.emptyBody")} />
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
@@ -115,27 +140,63 @@ export function AchievementsView() {
 
 export function RewardsView() {
   const t = useT();
-  const childId = useAppStore((s) => s.selectedChildId);
-  const child = getChild(childId);
-  const gains = useGains(childId);
-  const stars = child.stars + gains.stars;
+  const { selectedChild } = useChildContext();
+  const queryClient = useQueryClient();
+  const pushToast = useAppStore((s) => s.pushToast);
+
+  const { data, isLoading } = useQuery({
+    queryKey: queryKeys.rewards(selectedChild?.id ?? "none"),
+    queryFn: () => fetchRewards(selectedChild!.id),
+    enabled: Boolean(selectedChild?.id),
+  });
+
+  const claim = useMutation({
+    mutationFn: (rewardId: string) => claimReward(selectedChild!.id, rewardId),
+    onSuccess: async () => {
+      // Claiming spends stars, so the child aggregate has to be refetched too.
+      await queryClient.invalidateQueries({ queryKey: ["children"] });
+      pushToast({ title: "Reward claimed", tone: "mint", glyph: "🎁" });
+    },
+    onError: (error) => {
+      pushToast({
+        title: error instanceof ApiError ? error.message : "That reward couldn't be claimed.",
+        tone: "coral",
+        glyph: "⚠️",
+      });
+    },
+  });
+
+  if (!selectedChild) {
+    return <EmptyState glyph="👶" title="No child selected" body="Add a child to open the reward store." />;
+  }
+
+  const rewards = data ?? [];
+  const stars = selectedChild.progress?.stars ?? 0;
 
   return (
     <div className="mx-auto w-full max-w-[95rem] space-y-6">
-      <PageHeading title={t("nav.rewards")} subtitle={`${child.name} can spend stars on avatars, themes and stickers.`} />
+      <PageHeading title={t("nav.rewards")} subtitle={`${selectedChild.name} can spend stars on avatars, themes and stickers.`} />
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatCard tone="sun" glyph="⭐" label="Stars available" value={stars} />
-        <StatCard tone="mint" glyph="🎁" label="Rewards claimed" value={rewards.filter((r) => r.unlocked).length} />
-        <StatCard tone="grape" glyph="🔒" label="Still locked" value={rewards.filter((r) => !r.unlocked).length} />
+        <StatCard tone="mint" glyph="🎁" label="Rewards claimed" value={rewards.filter((r) => r.claimed).length} />
+        <StatCard tone="grape" glyph="🔒" label="Still locked" value={rewards.filter((r) => !r.claimed).length} />
       </div>
 
       <Card>
         <CardHeader title="Reward store" subtitle="Stars are earned in lessons and games — never bought." />
         <CardBody className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {rewards.map((reward) => (
-            <RewardCard key={reward.id} reward={reward} stars={stars} />
-          ))}
+          {isLoading
+            ? [0, 1, 2].map((i) => <SkeletonCard key={i} className="h-52" />)
+            : rewards.map((reward) => (
+                <RewardCard
+                  key={reward.id}
+                  reward={reward}
+                  stars={stars}
+                  claiming={claim.isPending}
+                  onClaim={(rewardId) => claim.mutate(rewardId)}
+                />
+              ))}
         </CardBody>
       </Card>
     </div>
@@ -146,15 +207,16 @@ export function RewardsView() {
 
 export function LeaderboardView() {
   const t = useT();
-  const childId = useAppStore((s) => s.selectedChildId);
-  const child = getChild(childId);
-  const [period, setPeriod] = useState<"weekly" | "monthly" | "all">("weekly");
+  const { selectedChild } = useChildContext();
+  const [period, setPeriod] = useState<LeaderboardPeriod>("WEEKLY");
 
-  const entries = useMemo(
-    () => buildLeaderboard(childId, period === "weekly" ? 1 : period === "monthly" ? 3.4 : 9.2),
-    [childId, period],
-  );
-  const me = entries.find((entry) => entry.isCurrentChild);
+  const { data, isLoading } = useQuery({
+    queryKey: queryKeys.leaderboard(period, selectedChild?.id),
+    queryFn: () => fetchLeaderboard(period, selectedChild?.id),
+  });
+
+  const entries = data?.entries ?? [];
+  const me = data?.currentChild ?? null;
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6">
@@ -169,47 +231,55 @@ export function LeaderboardView() {
         value={period}
         onChange={setPeriod}
         items={[
-          { id: "weekly", label: t("common.weekly") },
-          { id: "monthly", label: t("common.monthly") },
-          { id: "all", label: t("common.allTime") },
+          { id: "WEEKLY", label: t("common.weekly") },
+          { id: "MONTHLY", label: t("common.monthly") },
+          { id: "ALL_TIME", label: t("common.allTime") },
         ]}
       />
 
-      <Card>
-        <CardBody className="pt-8">
-          <LeaderboardPodium entries={entries} />
-        </CardBody>
-      </Card>
+      {isLoading ? (
+        <SkeletonCard className="h-64" />
+      ) : entries.length === 0 ? (
+        <EmptyState glyph="🏆" title="No standings yet" body="The board fills in as children start learning." />
+      ) : (
+        <>
+          <Card>
+            <CardBody className="pt-8">
+              <LeaderboardPodium entries={entries} />
+            </CardBody>
+          </Card>
 
-      {me ? (
-        <Card className="border-primary bg-primary-soft">
-          <CardBody className="flex flex-wrap items-center justify-between gap-4 pt-5">
-            <div>
-              <p className="t-overline text-primary">{child.name}&apos;s position</p>
-              <p className="t-h2 mt-0.5 text-content">
-                #{me.rank} <span className="t-body-sm font-semibold text-content-secondary">of {entries.length}</span>
-              </p>
-            </div>
-            <div className="flex gap-6">
-              <div className="text-right">
-                <p className="t-caption text-content-secondary">{t("common.stars")}</p>
-                <p className="t-h3 text-content tabular-nums">⭐ {me.stars}</p>
-              </div>
-              <div className="text-right">
-                <p className="t-caption text-content-secondary">{t("common.xp")}</p>
-                <p className="t-h3 text-content tabular-nums">{me.xp}</p>
-              </div>
-            </div>
-          </CardBody>
-        </Card>
-      ) : null}
+          {me ? (
+            <Card className="border-primary bg-primary-soft">
+              <CardBody className="flex flex-wrap items-center justify-between gap-4 pt-5">
+                <div>
+                  <p className="t-overline text-primary">{me.displayName}&apos;s position</p>
+                  <p className="t-h2 mt-0.5 text-content">
+                    #{me.rank} <span className="t-body-sm font-semibold text-content-secondary">of {entries.length}</span>
+                  </p>
+                </div>
+                <div className="flex gap-6">
+                  <div className="text-right">
+                    <p className="t-caption text-content-secondary">{t("common.stars")}</p>
+                    <p className="t-h3 text-content tabular-nums">⭐ {me.stars}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="t-caption text-content-secondary">{t("common.xp")}</p>
+                    <p className="t-h3 text-content tabular-nums">{me.xp}</p>
+                  </div>
+                </div>
+              </CardBody>
+            </Card>
+          ) : null}
 
-      <Card>
-        <CardHeader title="Full ranking" subtitle={`${entries.length} learners in this age band`} />
-        <CardBody>
-          <LeaderboardList entries={entries} />
-        </CardBody>
-      </Card>
+          <Card>
+            <CardHeader title="Full ranking" subtitle={`${entries.length} learners`} />
+            <CardBody>
+              <LeaderboardList entries={entries} />
+            </CardBody>
+          </Card>
+        </>
+      )}
     </div>
   );
 }
