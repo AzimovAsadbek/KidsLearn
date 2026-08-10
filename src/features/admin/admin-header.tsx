@@ -19,16 +19,18 @@ export function AdminHeaderSlot() {
 
   return (
     <nav aria-label="Breadcrumb" className="min-w-0">
-      <ol className="flex items-center gap-1.5">
-        <li>
+      {/* min-w-0 + overflow-hidden let the trailing crumb truncate instead of
+          pushing the header wider than a 375px viewport. */}
+      <ol className="flex min-w-0 items-center gap-1.5 overflow-hidden">
+        <li className="shrink-0">
           <Link href="/admin" className="t-body-sm font-semibold text-content-secondary hover:text-content">
             {t("nav.admin")}
           </Link>
         </li>
         {group?.titleKey && group.titleKey !== "nav.admin" ? (
           <>
-            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-content-tertiary" aria-hidden />
-            <li className="t-body-sm hidden font-semibold text-content-secondary sm:block">
+            <ChevronRight className="hidden h-3.5 w-3.5 shrink-0 text-content-tertiary sm:block" aria-hidden />
+            <li className="t-body-sm hidden shrink-0 font-semibold text-content-secondary sm:block">
               {t(group.titleKey)}
             </li>
           </>

@@ -49,7 +49,9 @@ export function KidShell({ children }: { children: ReactNode }) {
 
       <header className="sticky top-0 z-30 border-b border-border/60 bg-surface/70 backdrop-blur-md">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-3 px-4 sm:px-6">
-          <Link href="/kids/profile" className="flex items-center gap-2.5 rounded-full">
+          {/* min-h-11 keeps this at the 44px touch target every child-facing
+              control in the app meets. */}
+          <Link href="/kids/profile" className="flex min-h-11 items-center gap-2.5 rounded-full pr-2">
             <Avatar spec={child.avatar} size="sm" ring />
             <span className="font-display text-base font-extrabold text-content">{child.name}</span>
           </Link>
