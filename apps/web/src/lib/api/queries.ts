@@ -51,6 +51,7 @@ export const queryKeys = {
   leaderboard: (period: string, childId?: string) => ["leaderboard", period, childId ?? null] as const,
   notifications: (params: Record<string, unknown>) => ["notifications", params] as const,
   pushStatus: ["notifications", "push-status"] as const,
+  parentSettings: ["auth", "parent-settings"] as const,
   adminMetrics: ["admin", "metrics"] as const,
   adminAnalytics: ["admin", "analytics"] as const,
   adminUsers: (params: Record<string, unknown>) => ["admin", "users", params] as const,
@@ -104,6 +105,8 @@ export interface LessonListParams {
   difficulty?: string;
   status?: string;
   search?: string;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
   page?: number;
   limit?: number;
 }

@@ -7,6 +7,8 @@ import {
   LOCALE_COOKIE,
   localeMeta,
   translate,
+  translatePlural,
+  type PluralBase,
   type TranslateValues,
   type TranslationKey,
 } from "./config";
@@ -15,6 +17,8 @@ interface I18nValue {
   locale: Locale;
   setLocale: (locale: Locale) => void;
   t: (key: TranslationKey, values?: TranslateValues) => string;
+  /** Count-aware translation using the locale's CLDR plural categories. */
+  plural: (base: PluralBase, count: number, values?: TranslateValues) => string;
   /** BCP-47 tag for Intl.NumberFormat / DateTimeFormat call sites. */
   intlLocale: string;
 }
@@ -37,6 +41,7 @@ export function I18nProvider({ initialLocale, children }: { initialLocale: Local
       locale,
       setLocale,
       t: (key, values) => translate(locale, key, values),
+      plural: (base, count, values) => translatePlural(locale, base, count, values),
       intlLocale: localeMeta(locale).intl,
     }),
     [locale, setLocale],
@@ -54,6 +59,7 @@ export function useI18n(): I18nValue {
       locale: DEFAULT_LOCALE,
       setLocale: () => undefined,
       t: (key, values) => translate(DEFAULT_LOCALE, key, values),
+      plural: (base, count, values) => translatePlural(DEFAULT_LOCALE, base, count, values),
       intlLocale: "en-US",
     };
   }

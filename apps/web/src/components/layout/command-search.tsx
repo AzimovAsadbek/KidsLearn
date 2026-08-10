@@ -2,15 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
-import { useT } from "@/i18n/provider";
+import { useI18n, useT } from "@/i18n/provider";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import { useSession } from "@/components/providers/session-provider";
+import { fetchChildren, fetchGames, fetchLessons, fetchSubjects, queryKeys } from "@/lib/api/queries";
 import { Modal } from "@/components/ui/overlay";
-import { lessons } from "@/data/lessons";
-import { games } from "@/data/games";
-import { children } from "@/data/children";
-import { subjects } from "@/data/subjects";
 
 interface Hit {
   id: string;
@@ -21,59 +21,96 @@ interface Hit {
   href: string;
 }
 
+function toneKey(tone: string): keyof typeof toneStyles {
+  return (tone in toneStyles ? tone : "brand") as keyof typeof toneStyles;
+}
+
 /**
- * Product-wide search. Indexes the entities a parent or admin actually looks
- * for; results are grouped and keyboard-navigable.
+ * Product-wide search over live data. Lessons and games are searched
+ * server-side (same index the library uses); children and subjects are small
+ * lists filtered locally.
  */
 export function CommandSearch({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useT();
+  const { locale } = useI18n();
+  const { isAuthenticated, user } = useSession();
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [cursor, setCursor] = useState(0);
+  const needle = useDebouncedValue(query.trim(), 250);
 
-  const index = useMemo<Hit[]>(
-    () => [
-      ...children.map<Hit>((c) => ({
+  const lessons = useQuery({
+    queryKey: [...queryKeys.lessons({ search: needle, purpose: "command" }), locale],
+    queryFn: () => fetchLessons({ search: needle || undefined, limit: 6, locale }),
+    enabled: open && isAuthenticated,
+  });
+
+  const games = useQuery({
+    queryKey: [...queryKeys.games({ search: needle, purpose: "command" }), locale],
+    queryFn: () => fetchGames({ search: needle || undefined, limit: 6, locale }),
+    enabled: open && isAuthenticated,
+  });
+
+  const subjects = useQuery({
+    queryKey: [...queryKeys.subjects, locale],
+    queryFn: () => fetchSubjects(locale),
+    enabled: open && isAuthenticated,
+  });
+
+  const children = useQuery({
+    queryKey: queryKeys.children,
+    queryFn: fetchChildren,
+    enabled: open && isAuthenticated && user?.role === "PARENT",
+  });
+
+  const results = useMemo<Hit[]>(() => {
+    const lower = needle.toLowerCase();
+    const isAdmin = user?.role === "ADMIN";
+
+    const childHits = (children.data ?? [])
+      .filter((c) => !lower || c.name.toLowerCase().includes(lower))
+      .map<Hit>((c) => ({
         id: c.id,
         title: c.name,
-        group: "Children",
-        glyph: c.avatar.glyph,
-        tone: c.avatar.tone,
+        group: t("search.groupChildren"),
+        glyph: c.avatarGlyph,
+        tone: toneKey(c.avatarTone),
         href: `/children/${c.id}`,
-      })),
-      ...lessons.map<Hit>((l) => ({
-        id: l.id,
-        title: l.title,
-        group: "Lessons",
-        glyph: l.glyph,
-        tone: l.tone,
-        href: `/lessons#${l.id}`,
-      })),
-      ...games.map<Hit>((g) => ({
-        id: g.id,
-        title: g.title,
-        group: "Games",
-        glyph: g.glyph,
-        tone: g.tone,
-        href: `/kids/games/${g.id}`,
-      })),
-      ...subjects.map<Hit>((s) => ({
+      }));
+
+    const lessonHits = (lessons.data?.items ?? []).map<Hit>((l) => ({
+      id: l.id,
+      title: l.title,
+      group: t("search.groupLessons"),
+      glyph: l.glyph,
+      tone: toneKey(l.tone),
+      href: isAdmin ? `/admin/lessons?highlight=${l.id}` : `/kids/lessons/${l.slug}`,
+    }));
+
+    const gameHits = (games.data?.items ?? []).map<Hit>((g) => ({
+      id: g.id,
+      title: g.title,
+      group: t("search.groupGames"),
+      glyph: g.glyph,
+      tone: toneKey(g.tone),
+      href: isAdmin ? `/admin/games?highlight=${g.id}` : `/kids/games/${g.slug}`,
+    }));
+
+    const subjectHits = (subjects.data ?? [])
+      .filter((s) => !lower || s.name.toLowerCase().includes(lower))
+      .map<Hit>((s) => ({
         id: s.id,
         title: s.name,
-        group: "Subjects",
+        group: t("search.groupSubjects"),
         glyph: s.glyph,
-        tone: s.tone,
-        href: `/lessons?subject=${s.slug}`,
-      })),
-    ],
-    [],
-  );
+        tone: toneKey(s.tone),
+        href: isAdmin ? "/admin/subjects" : `/lessons?subject=${s.slug}`,
+      }));
 
-  const results = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return index.slice(0, 8);
-    return index.filter((hit) => hit.title.toLowerCase().includes(needle)).slice(0, 12);
-  }, [index, query]);
+    return [...childHits, ...lessonHits, ...gameHits, ...subjectHits].slice(0, 12);
+  }, [needle, children.data, lessons.data, games.data, subjects.data, user?.role, t]);
+
+  const isSearching = lessons.isLoading || games.isLoading;
 
   // Keep the highlight inside the result set as it shrinks, without an effect.
   const activeIndex = Math.min(cursor, Math.max(0, results.length - 1));
@@ -133,8 +170,14 @@ export function CommandSearch({ open, onClose }: { open: boolean; onClose: () =>
 
         {results.length === 0 ? (
           <div className="px-6 py-12 text-center">
-            <p className="t-h4 text-content">{t("state.noResultsTitle")}</p>
-            <p className="t-body-sm mt-1 text-content-secondary">{t("state.noResultsBody")}</p>
+            {isSearching ? (
+              <p className="t-body-sm text-content-secondary">{t("common.loading")}</p>
+            ) : (
+              <>
+                <p className="t-h4 text-content">{t("state.noResultsTitle")}</p>
+                <p className="t-body-sm mt-1 text-content-secondary">{t("state.noResultsBody")}</p>
+              </>
+            )}
           </div>
         ) : (
           <ul className="scrollbar-slim max-h-[24rem] overflow-y-auto p-2">

@@ -2,13 +2,22 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BellRing, CheckCheck, Trash2 } from "lucide-react";
 import { cn, formatRelativeTime } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
 import { useI18n, useT } from "@/i18n/provider";
-import type { NotificationCategory } from "@/types";
-import { useAppStore, useUnreadCount } from "@/store/app-store";
-import { NOW } from "@/data/children";
+import { NotificationType } from "@kidslearn/types";
+import { useNotifications } from "@/hooks/use-notifications";
+import { useAppStore } from "@/store/app-store";
+import {
+  fetchParentSettings,
+  fetchPushStatus,
+  queryKeys,
+  subscribePush,
+  unsubscribePush,
+  updateParentSettings,
+} from "@/lib/api/queries";
 import { PageHeading } from "@/components/layout/app-shell";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Tabs } from "@/components/ui/tabs";
@@ -16,33 +25,37 @@ import { Button, IconButton } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/states";
 import { Switch } from "@/components/ui/field";
 
-type Filter = "all" | "unread" | NotificationCategory;
+type Filter = "all" | "unread" | "achievements" | "content" | "reminders";
+
+/** Which API notification types each human-facing tab collects. */
+const FILTER_TYPES: Record<Exclude<Filter, "all" | "unread">, NotificationType[]> = {
+  achievements: [NotificationType.ACHIEVEMENT_EARNED, NotificationType.REWARD_EARNED, NotificationType.STREAK],
+  content: [NotificationType.NEW_LESSON],
+  reminders: [NotificationType.LESSON_REMINDER],
+};
 
 export function NotificationsView() {
   const t = useT();
-  const { intlLocale } = useI18n();
-  const notifications = useAppStore((s) => s.notifications);
-  const markRead = useAppStore((s) => s.markNotificationRead);
-  const markAll = useAppStore((s) => s.markAllNotificationsRead);
-  const remove = useAppStore((s) => s.removeNotification);
-  const unread = useUnreadCount();
+  const { intlLocale, plural } = useI18n();
+  const { notifications, unread, markRead, markAll, remove, isLoading } = useNotifications();
   const [filter, setFilter] = useState<Filter>("all");
 
   const shown = useMemo(() => {
     if (filter === "all") return notifications;
     if (filter === "unread") return notifications.filter((n) => !n.read);
-    return notifications.filter((n) => n.category === filter);
+    const types = FILTER_TYPES[filter];
+    return notifications.filter((n) => types.includes(n.type));
   }, [notifications, filter]);
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-5">
       <PageHeading
         title={t("nav.notifications")}
-        subtitle={unread > 0 ? `${unread} unread` : "You're all caught up."}
+        subtitle={unread > 0 ? plural("plural.unread", unread) : t("notif.allCaughtUp")}
         actions={
           unread > 0 ? (
             <Button variant="secondary" leadingIcon={<CheckCheck className="h-4 w-4" />} onClick={markAll}>
-              Mark all read
+              {t("notif.markAllRead")}
             </Button>
           ) : undefined
         }
@@ -50,27 +63,29 @@ export function NotificationsView() {
 
       <Tabs
         variant="pill"
-        ariaLabel="Notification filters"
+        ariaLabel={t("notif.filters")}
         value={filter}
         onChange={setFilter}
         items={[
-          { id: "all", label: "All", count: notifications.length },
-          { id: "unread", label: "Unread", count: unread },
-          { id: "achievement", label: "Achievements" },
-          { id: "content", label: "New content" },
-          { id: "reminder", label: "Reminders" },
+          { id: "all", label: t("common.all"), count: notifications.length },
+          { id: "unread", label: t("notif.tabUnread"), count: unread },
+          { id: "achievements", label: t("notif.tabAchievements") },
+          { id: "content", label: t("notif.tabContent") },
+          { id: "reminders", label: t("notif.tabReminders") },
         ]}
       />
 
-      {shown.length === 0 ? (
+      {isLoading ? (
+        <div className="space-y-2.5">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="shimmer h-24 rounded-xl" />
+          ))}
+        </div>
+      ) : shown.length === 0 ? (
         <EmptyState
           glyph="🔔"
-          title={filter === "unread" ? "Nothing unread" : t("state.emptyTitle")}
-          body={
-            filter === "unread"
-              ? "Every notification has been read. We'll let you know when something new happens."
-              : t("state.emptyBody")
-          }
+          title={filter === "unread" ? t("notif.emptyUnreadTitle") : t("state.emptyTitle")}
+          body={filter === "unread" ? t("notif.emptyUnreadBody") : t("state.emptyBody")}
         />
       ) : (
         <ul className="space-y-2.5">
@@ -83,7 +98,10 @@ export function NotificationsView() {
                 )}
               >
                 <span
-                  className={cn("grid h-11 w-11 shrink-0 place-items-center rounded-md text-xl", toneStyles[notification.tone].soft)}
+                  className={cn(
+                    "grid h-11 w-11 shrink-0 place-items-center rounded-md text-xl",
+                    (toneStyles[notification.tone as keyof typeof toneStyles] ?? toneStyles.brand).soft,
+                  )}
                   aria-hidden
                 >
                   {notification.glyph}
@@ -94,11 +112,14 @@ export function NotificationsView() {
                     <p className="t-h4 text-content">
                       {notification.title}
                       {!notification.read ? (
-                        <span className="ml-2 inline-block h-2 w-2 rounded-full bg-primary align-middle" aria-label="Unread" />
+                        <span
+                          className="ml-2 inline-block h-2 w-2 rounded-full bg-primary align-middle"
+                          aria-label={t("notif.unread")}
+                        />
                       ) : null}
                     </p>
                     <span className="t-caption shrink-0 text-content-tertiary">
-                      {formatRelativeTime(notification.at, NOW, intlLocale)}
+                      {formatRelativeTime(notification.createdAt, new Date(), intlLocale)}
                     </span>
                   </div>
                   <p className="t-body-sm mt-1 text-content-secondary">{notification.body}</p>
@@ -110,7 +131,7 @@ export function NotificationsView() {
                         onClick={() => markRead(notification.id)}
                         className="t-label rounded-sm bg-surface-muted px-3 py-1.5 text-content hover:bg-border"
                       >
-                        Open
+                        {t("common.open")}
                       </Link>
                     ) : null}
                     {!notification.read ? (
@@ -119,14 +140,14 @@ export function NotificationsView() {
                         onClick={() => markRead(notification.id)}
                         className="t-label rounded-sm px-3 py-1.5 text-primary hover:bg-primary-soft"
                       >
-                        Mark as read
+                        {t("notif.markRead")}
                       </button>
                     ) : null}
                   </div>
                 </div>
 
                 <IconButton
-                  label={`Remove: ${notification.title}`}
+                  label={`${t("common.remove")}: ${notification.title}`}
                   size="icon-sm"
                   className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                   onClick={() => remove(notification.id)}
@@ -144,12 +165,81 @@ export function NotificationsView() {
   );
 }
 
-/** The push opt-in, shown as a card rather than a browser-blocking prompt. */
+/** Converts a base64url VAPID key into the byte array PushManager expects. */
+function urlBase64ToUint8Array(base64: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
+  const normalized = (base64 + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(normalized);
+  return Uint8Array.from(raw, (char) => char.charCodeAt(0));
+}
+
+/**
+ * Real push opt-in backed by the Push API. The reminder/report switches persist
+ * to the parent's settings; the subscribe button registers this browser with
+ * the server. When the server has no VAPID keys the card says so instead of
+ * pretending.
+ */
 export function PushPermissionCard() {
   const t = useT();
   const pushToast = useAppStore((s) => s.pushToast);
-  const [preferences, setPreferences] = useState({ content: true, rewards: true, reminders: false });
-  const [granted, setGranted] = useState(false);
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+
+  const status = useQuery({ queryKey: queryKeys.pushStatus, queryFn: fetchPushStatus });
+  const settings = useQuery({ queryKey: queryKeys.parentSettings, queryFn: fetchParentSettings });
+
+  const saveSettings = useMutation({
+    mutationFn: updateParentSettings,
+    onSuccess: (data) => queryClient.setQueryData(queryKeys.parentSettings, data),
+    onError: () => pushToast({ title: t("state.errorTitle"), tone: "coral", glyph: "⚠️" }),
+  });
+
+  async function enablePush() {
+    const publicKey = status.data?.publicKey;
+    if (!publicKey) return;
+    setBusy(true);
+    try {
+      if (typeof Notification === "undefined" || !("serviceWorker" in navigator)) {
+        pushToast({ title: t("push.unsupported"), tone: "coral", glyph: "🚫" });
+        return;
+      }
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        pushToast({ title: t("push.denied"), tone: "coral", glyph: "🔕" });
+        return;
+      }
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey) as unknown as BufferSource,
+      });
+      await subscribePush(subscription.toJSON());
+      await queryClient.invalidateQueries({ queryKey: queryKeys.pushStatus });
+      pushToast({ title: t("push.enabled"), tone: "mint", glyph: "🔔" });
+    } catch {
+      pushToast({ title: t("state.errorTitle"), tone: "coral", glyph: "⚠️" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function disablePush() {
+    setBusy(true);
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        await unsubscribePush(subscription.endpoint);
+        await subscription.unsubscribe();
+      }
+      await queryClient.invalidateQueries({ queryKey: queryKeys.pushStatus });
+      pushToast({ title: t("push.disabled"), tone: "sky", glyph: "🔕" });
+    } catch {
+      pushToast({ title: t("state.errorTitle"), tone: "coral", glyph: "⚠️" });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <Card className="overflow-hidden">
@@ -165,35 +255,32 @@ export function PushPermissionCard() {
       <CardBody className="space-y-4">
         <div className="space-y-3 rounded-lg bg-surface-muted p-4">
           <Switch
-            label={t("push.reason1")}
-            checked={preferences.content}
-            onChange={(v) => setPreferences((p) => ({ ...p, content: v }))}
+            label={t("push.dailyReminder")}
+            checked={settings.data?.reminderEnabled ?? false}
+            disabled={settings.isLoading || saveSettings.isPending}
+            onChange={(v) => saveSettings.mutate({ reminderEnabled: v })}
           />
           <Switch
-            label={t("push.reason2")}
-            checked={preferences.rewards}
-            onChange={(v) => setPreferences((p) => ({ ...p, rewards: v }))}
-          />
-          <Switch
-            label={t("push.reason3")}
-            checked={preferences.reminders}
-            onChange={(v) => setPreferences((p) => ({ ...p, reminders: v }))}
+            label={t("push.weeklyReport")}
+            checked={settings.data?.weeklyReportEnabled ?? false}
+            disabled={settings.isLoading || saveSettings.isPending}
+            onChange={(v) => saveSettings.mutate({ weeklyReportEnabled: v })}
           />
         </div>
 
-        <Button
-          disabled={granted}
-          onClick={async () => {
-            // Ask the browser only after the family has chosen what they want.
-            if (typeof Notification !== "undefined" && Notification.permission === "default") {
-              await Notification.requestPermission().catch(() => undefined);
-            }
-            setGranted(true);
-            pushToast({ title: "Notifications enabled", tone: "mint", glyph: "🔔" });
-          }}
-        >
-          {granted ? "Notifications enabled" : t("push.enable")}
-        </Button>
+        {status.data?.configured === false ? (
+          <p className="t-body-sm rounded-lg border border-dashed border-border-strong bg-surface-muted p-3 text-content-secondary">
+            {t("push.notConfigured")}
+          </p>
+        ) : status.data?.subscribed ? (
+          <Button variant="secondary" onClick={() => void disablePush()} loading={busy}>
+            {t("push.disable")}
+          </Button>
+        ) : (
+          <Button onClick={() => void enablePush()} loading={busy} disabled={status.isLoading}>
+            {t("push.enable")}
+          </Button>
+        )}
       </CardBody>
     </Card>
   );

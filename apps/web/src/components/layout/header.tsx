@@ -9,12 +9,12 @@ import { toneStyles } from "@/lib/tone";
 import { useI18n, useT } from "@/i18n/provider";
 import { LOCALES } from "@/i18n/config";
 import { useTheme } from "@/components/providers/theme-provider";
-import { useAppStore, useUnreadCount } from "@/store/app-store";
+import { useSession } from "@/components/providers/session-provider";
+import { useNotifications } from "@/hooks/use-notifications";
 import { Dropdown, MenuItem, MenuLabel, MenuSeparator } from "@/components/ui/menu";
 import { IconButton } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { CountBadge } from "@/components/ui/badge";
-import { NOW, parent } from "@/data/children";
 import { CommandSearch } from "./command-search";
 
 export function Header({
@@ -169,10 +169,7 @@ export function LanguageMenu() {
 export function NotificationsMenu() {
   const t = useT();
   const { intlLocale } = useI18n();
-  const notifications = useAppStore((s) => s.notifications);
-  const markAll = useAppStore((s) => s.markAllNotificationsRead);
-  const markRead = useAppStore((s) => s.markNotificationRead);
-  const unread = useUnreadCount();
+  const { notifications, unread, markAll, markRead } = useNotifications();
 
   return (
     <Dropdown
@@ -205,11 +202,16 @@ export function NotificationsMenu() {
                 onClick={markAll}
                 className="t-caption font-semibold text-primary hover:underline"
               >
-                Mark all read
+                {t("notif.markAllRead")}
               </button>
             ) : null}
           </div>
           <ul className="scrollbar-slim max-h-80 overflow-y-auto">
+            {notifications.length === 0 ? (
+              <li className="px-4 py-8 text-center">
+                <span className="t-body-sm text-content-secondary">{t("notif.empty")}</span>
+              </li>
+            ) : null}
             {notifications.slice(0, 6).map((notification) => (
               <li key={notification.id}>
                 <Link
@@ -226,7 +228,7 @@ export function NotificationsMenu() {
                   <span
                     className={cn(
                       "grid h-9 w-9 shrink-0 place-items-center rounded-sm text-base",
-                      toneStyles[notification.tone].soft,
+                      (toneStyles[notification.tone as keyof typeof toneStyles] ?? toneStyles.brand).soft,
                     )}
                     aria-hidden
                   >
@@ -238,11 +240,11 @@ export function NotificationsMenu() {
                       {notification.body}
                     </span>
                     <span className="t-caption mt-1 block text-content-tertiary">
-                      {formatRelativeTime(notification.at, NOW, intlLocale)}
+                      {formatRelativeTime(notification.createdAt, new Date(), intlLocale)}
                     </span>
                   </span>
                   {!notification.read ? (
-                    <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="Unread" />
+                    <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" aria-label={t("notif.unread")} />
                   ) : null}
                 </Link>
               </li>
@@ -266,6 +268,15 @@ export function NotificationsMenu() {
 export function ProfileMenu() {
   const t = useT();
   const router = useRouter();
+  const { user, signOut } = useSession();
+
+  if (!user) return null;
+
+  const avatar = {
+    glyph: user.avatarGlyph || "🙂",
+    tone: (user.avatarTone in toneStyles ? user.avatarTone : "brand") as keyof typeof toneStyles,
+  };
+
   return (
     <Dropdown
       label={t("common.profile")}
@@ -277,18 +288,18 @@ export function ProfileMenu() {
           aria-label={t("common.profile")}
           className="ml-1 flex items-center gap-2 rounded-full p-0.5 pr-2 transition-colors hover:bg-surface-muted"
         >
-          <Avatar spec={parent.avatar} size="sm" />
-          <span className="t-label hidden max-w-24 truncate text-content sm:block">{parent.name}</span>
+          <Avatar spec={avatar} size="sm" />
+          <span className="t-label hidden max-w-24 truncate text-content sm:block">{user.name}</span>
         </button>
       )}
     >
       {(close) => (
         <>
           <div className="flex items-center gap-3 px-3 py-2.5">
-            <Avatar spec={parent.avatar} size="md" />
+            <Avatar spec={avatar} size="md" />
             <div className="min-w-0">
-              <p className="t-label truncate text-content">{parent.name}</p>
-              <p className="t-caption truncate text-content-secondary">{parent.email}</p>
+              <p className="t-label truncate text-content">{user.name}</p>
+              <p className="t-caption truncate text-content-secondary">{user.email}</p>
             </div>
           </div>
           <MenuSeparator />
@@ -315,8 +326,8 @@ export function ProfileMenu() {
             icon={<LogOut className="h-4 w-4" />}
             danger
             onClick={() => {
-              router.push("/login");
               close();
+              void signOut();
             }}
           >
             {t("common.logout")}

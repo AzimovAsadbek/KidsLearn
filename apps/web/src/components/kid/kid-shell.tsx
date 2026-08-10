@@ -7,13 +7,15 @@ import { LogOut, Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
 import { useT } from "@/i18n/provider";
-import { useAppStore, useGains } from "@/store/app-store";
+import { useAppStore } from "@/store/app-store";
+import { useChildContext } from "@/components/providers/child-provider";
+import { verifyParentPin } from "@/lib/api/queries";
 import { kidBottomNav, isNavActive } from "@/config/navigation";
-import { getChild } from "@/data/children";
 import { Avatar } from "@/components/ui/avatar";
 import { Modal } from "@/components/ui/overlay";
 import { Button } from "@/components/ui/button";
 import { OfflineBanner } from "@/components/layout/offline-banner";
+import { KidLoading } from "./kid-loading";
 
 /**
  * The child shell is deliberately *not* a dashboard: no sidebar, no search, no
@@ -23,9 +25,7 @@ import { OfflineBanner } from "@/components/layout/offline-banner";
 export function KidShell({ children }: { children: ReactNode }) {
   const t = useT();
   const pathname = usePathname();
-  const childId = useAppStore((s) => s.selectedChildId);
-  const child = getChild(childId);
-  const gains = useGains(childId);
+  const { selectedChild, loading } = useChildContext();
   const soundEnabled = useAppStore((s) => s.soundEnabled);
   const toggleSound = useAppStore((s) => s.toggleSound);
   const [exitOpen, setExitOpen] = useState(false);
@@ -43,6 +43,16 @@ export function KidShell({ children }: { children: ReactNode }) {
     );
   }
 
+  if (loading || !selectedChild) {
+    return (
+      <div className="canvas-kid min-h-dvh">
+        <KidLoading />
+      </div>
+    );
+  }
+
+  const avatarTone = (selectedChild.avatarTone in toneStyles ? selectedChild.avatarTone : "brand") as keyof typeof toneStyles;
+
   return (
     <div className="canvas-kid flex min-h-dvh flex-col">
       <OfflineBanner />
@@ -52,22 +62,22 @@ export function KidShell({ children }: { children: ReactNode }) {
           {/* min-h-11 keeps this at the 44px touch target every child-facing
               control in the app meets. */}
           <Link href="/kids/profile" className="flex min-h-11 items-center gap-2.5 rounded-full pr-2">
-            <Avatar spec={child.avatar} size="sm" ring />
-            <span className="font-display text-base font-extrabold text-content">{child.name}</span>
+            <Avatar spec={{ glyph: selectedChild.avatarGlyph, tone: avatarTone }} size="sm" ring />
+            <span className="font-display text-base font-extrabold text-content">{selectedChild.name}</span>
           </Link>
 
           <div className="ml-auto flex items-center gap-2">
             <span className="flex items-center gap-1.5 rounded-full bg-sun-soft px-3 py-1.5 dark:bg-sun-core/20">
               <span aria-hidden>⭐</span>
               <span className="t-label text-sun-deep tabular-nums dark:text-sun-core">
-                {child.stars + gains.stars}
+                {selectedChild.progress?.stars ?? 0}
               </span>
             </span>
 
             <button
               type="button"
               onClick={toggleSound}
-              aria-label={soundEnabled ? "Turn sound off" : "Turn sound on"}
+              aria-label={soundEnabled ? t("kid.soundOff") : t("kid.soundOn")}
               aria-pressed={soundEnabled}
               className="grid h-10 w-10 place-items-center rounded-full bg-surface text-content-secondary shadow-soft transition-colors hover:text-content"
             >
@@ -102,7 +112,7 @@ function KidTabBar() {
 
   return (
     <nav
-      aria-label="Kid navigation"
+      aria-label={t("nav.kidNavigation")}
       className="fixed inset-x-0 bottom-0 z-30 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2"
     >
       <ul className="mx-auto flex max-w-lg items-stretch justify-between gap-1 rounded-3xl border-2 border-border bg-surface/95 p-2 shadow-pop backdrop-blur">
@@ -138,24 +148,48 @@ function KidTabBar() {
   );
 }
 
-/** Grown-up gate. A simple arithmetic challenge keeps young children out. */
+/**
+ * Grown-up gate. The PIN is verified by the API against the parent account.
+ * When no PIN has been set yet the gate says so and lets the adult through —
+ * pretending an unset PIN protects anything would be worse than being honest.
+ */
 function ParentGate({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useT();
   const router = useRouter();
   const [pin, setPin] = useState("");
   const [error, setError] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [unconfigured, setUnconfigured] = useState(false);
 
-  // Fixed so the demo is walkable; a real build would verify against the account.
-  const CORRECT_PIN = "2468";
-
-  function submit() {
-    if (pin === CORRECT_PIN) {
-      onClose();
-      router.push("/dashboard");
-      return;
+  async function submit() {
+    if (checking) return;
+    setChecking(true);
+    try {
+      const result = await verifyParentPin(pin);
+      if (!result.configured) {
+        setUnconfigured(true);
+        return;
+      }
+      if (result.valid) {
+        onClose();
+        setPin("");
+        router.push("/dashboard");
+        return;
+      }
+      setError(true);
+      setPin("");
+    } catch {
+      setError(true);
+    } finally {
+      setChecking(false);
     }
-    setError(true);
+  }
+
+  function leaveWithoutPin() {
+    onClose();
     setPin("");
+    setUnconfigured(false);
+    router.push("/settings");
   }
 
   return (
@@ -165,54 +199,69 @@ function ParentGate({ open, onClose }: { open: boolean; onClose: () => void }) {
           🔒
         </div>
 
-        <div className="mt-5 flex justify-center gap-2" aria-hidden>
-          {[0, 1, 2, 3].map((i) => (
-            <span
-              key={i}
-              className={cn(
-                "h-12 w-10 rounded-lg border-2 text-2xl font-bold leading-[2.75rem]",
-                pin.length > i ? "border-primary bg-primary-soft text-primary" : "border-border",
-              )}
-            >
-              {pin.length > i ? "•" : ""}
-            </span>
-          ))}
-        </div>
-
-        <label className="sr-only" htmlFor="parent-pin">
-          {t("auth.pinTitle")}
-        </label>
-        <input
-          id="parent-pin"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          maxLength={4}
-          value={pin}
-          autoComplete="off"
-          onChange={(e) => {
-            setError(false);
-            setPin(e.target.value.replace(/\D/g, ""));
-          }}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          className="mt-4 h-11 w-40 rounded-sm border border-border bg-surface text-center text-lg tracking-[0.5em] text-content"
-        />
-
-        {error ? (
-          <p role="alert" className="t-body-sm mt-3 font-semibold text-danger">
-            {t("auth.pinError")}
-          </p>
+        {unconfigured ? (
+          <div className="mt-5">
+            <p className="t-body-sm font-semibold text-content">{t("auth.pinNotSetTitle")}</p>
+            <p className="t-caption mt-1 text-content-secondary">{t("auth.pinNotSetBody")}</p>
+            <div className="mt-5 flex gap-2">
+              <Button variant="ghost" fullWidth onClick={onClose}>
+                {t("common.cancel")}
+              </Button>
+              <Button fullWidth onClick={leaveWithoutPin}>
+                {t("auth.pinGoSetUp")}
+              </Button>
+            </div>
+          </div>
         ) : (
-          <p className="t-caption mt-3 text-content-secondary">Demo PIN: 2468</p>
-        )}
+          <>
+            <div className="mt-5 flex justify-center gap-2" aria-hidden>
+              {[0, 1, 2, 3].map((i) => (
+                <span
+                  key={i}
+                  className={cn(
+                    "h-12 w-10 rounded-lg border-2 text-2xl font-bold leading-[2.75rem]",
+                    pin.length > i ? "border-primary bg-primary-soft text-primary" : "border-border",
+                  )}
+                >
+                  {pin.length > i ? "•" : ""}
+                </span>
+              ))}
+            </div>
 
-        <div className="mt-5 flex gap-2">
-          <Button variant="ghost" fullWidth onClick={onClose}>
-            {t("common.cancel")}
-          </Button>
-          <Button fullWidth onClick={submit} disabled={pin.length < 4}>
-            {t("common.continue")}
-          </Button>
-        </div>
+            <label className="sr-only" htmlFor="parent-pin">
+              {t("auth.pinTitle")}
+            </label>
+            <input
+              id="parent-pin"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={4}
+              value={pin}
+              autoComplete="off"
+              onChange={(e) => {
+                setError(false);
+                setPin(e.target.value.replace(/\D/g, ""));
+              }}
+              onKeyDown={(e) => e.key === "Enter" && void submit()}
+              className="mt-4 h-11 w-40 rounded-sm border border-border bg-surface text-center text-lg tracking-[0.5em] text-content"
+            />
+
+            {error ? (
+              <p role="alert" className="t-body-sm mt-3 font-semibold text-danger">
+                {t("auth.pinError")}
+              </p>
+            ) : null}
+
+            <div className="mt-5 flex gap-2">
+              <Button variant="ghost" fullWidth onClick={onClose}>
+                {t("common.cancel")}
+              </Button>
+              <Button fullWidth onClick={() => void submit()} disabled={pin.length < 4} loading={checking}>
+                {t("common.continue")}
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </Modal>
   );

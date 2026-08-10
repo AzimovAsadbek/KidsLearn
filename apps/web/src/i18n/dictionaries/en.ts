@@ -301,8 +301,131 @@ export const en = {
   "state.notFoundTitle": "Oops! We couldn't find that page",
   "state.notFoundBody": "The page may have moved, or the link might be out of date.",
   "state.goHome": "Go home",
+
+  /* --- Final integration batch ----------------------------------------- */
+  "common.all": "All",
+  "common.open": "Open",
+  "common.mainNavigation": "Main navigation",
+
+  "nav.kidNavigation": "Kid navigation",
+
+  "notif.markAllRead": "Mark all read",
+  "notif.markRead": "Mark as read",
+  "notif.empty": "No notifications yet",
+  "notif.unread": "Unread",
+  "notif.allCaughtUp": "You're all caught up.",
+  "notif.filters": "Notification filters",
+  "notif.tabUnread": "Unread",
+  "notif.tabAchievements": "Achievements",
+  "notif.tabContent": "New content",
+  "notif.tabReminders": "Reminders",
+  "notif.emptyUnreadTitle": "Nothing unread",
+  "notif.emptyUnreadBody": "Every notification has been read. We'll let you know when something new happens.",
+
+  "push.dailyReminder": "Daily learning reminder",
+  "push.weeklyReport": "Weekly progress report",
+  "push.notConfigured": "Push notifications aren't configured on this server yet. In-app notifications still work.",
+  "push.unsupported": "This browser doesn't support push notifications",
+  "push.denied": "Notifications are blocked in the browser",
+  "push.enabled": "Push notifications enabled",
+  "push.disabled": "Push notifications turned off",
+  "push.disable": "Turn off push notifications",
+
+  "auth.pinNotSetTitle": "No PIN set yet",
+  "auth.pinNotSetBody": "Your account doesn't have a parent PIN. You can set one in Settings so only grown-ups can leave kid mode.",
+  "auth.pinGoSetUp": "Go to settings",
+
+  "kid.explore": "Explore",
+  "kid.noLessonsYet": "No lessons for this age yet — check back soon!",
+  "kid.noChildTitle": "Who is learning?",
+  "kid.noChildBody": "Ask a grown-up to add a learner profile first.",
+  "kid.soundOn": "Turn sound on",
+  "kid.soundOff": "Turn sound off",
+  "kid.lessonsSubtitle": "Pick something to learn today",
+  "kid.gamesSubtitle": "Play and collect stars",
+  "kid.booksSubtitle": "Stories to read together",
+  "kid.videosSubtitle": "Short songs and stories",
+  "kid.activitiesSubtitle": "Things to do away from the screen",
+  "kid.emptyShelfTitle": "Nothing here yet",
+  "kid.emptyShelfBody": "Try another subject!",
+  "kid.read": "Read",
+  "kid.ageBand": "{band} yrs",
+  "kid.activityDraw": "Draw",
+  "kid.activityTrace": "Trace",
+  "kid.activitySing": "Sing",
+  "kid.activityMove": "Move",
+  "kid.activityBuild": "Build",
+  "kid.printableHint": "Activities are printable. Ask a grown-up to open",
+
+  "lesson.noContent": "This lesson has no content yet.",
+  "lesson.hint": "Hint",
+
+  "game.plays": "Plays",
+  "game.completion": "Completion",
+
+  "games.librarySubtitle": "Six game engines, each tuned to a different way of learning.",
+  "games.sorting": "Game sorting",
+  "games.tabAll": "All games",
+  "games.tabPopular": "Most played",
+  "games.tabNew": "Recently updated",
+
+  "filter.allSubjects": "All subjects",
+  "filter.age": "Age",
+  "filter.allAges": "All ages",
+  "filter.difficulty": "Difficulty",
+  "filter.allLevels": "All levels",
+
+  "age.band1_2": "1–2 yrs",
+  "age.band3_4": "3–4 yrs",
+  "age.band5_7": "5–7 yrs",
+
+  "search.groupChildren": "Children",
+  "search.groupLessons": "Lessons",
+  "search.groupGames": "Games",
+  "search.groupSubjects": "Subjects",
+
+  /* --- Plurals (CLDR categories; ru adds few/many) ---------------------- */
+  "plural.lessons.one": "{count} lesson",
+  "plural.lessons.other": "{count} lessons",
+  "plural.lessonsPublished.one": "{count} published lesson",
+  "plural.lessonsPublished.other": "{count} published lessons",
+  "plural.games.one": "{count} game",
+  "plural.games.other": "{count} games",
+  "plural.stars.one": "{count} star",
+  "plural.stars.other": "{count} stars",
+  "plural.minutes.one": "{count} min",
+  "plural.minutes.other": "{count} min",
+  "plural.days.one": "{count} day",
+  "plural.days.other": "{count} days",
+  "plural.children.one": "{count} child",
+  "plural.children.other": "{count} children",
+  "plural.unread.one": "{count} unread",
+  "plural.unread.other": "{count} unread",
+  "plural.pages.one": "{count} page",
+  "plural.pages.other": "{count} pages",
+  "plural.plays.one": "{count} play",
+  "plural.plays.other": "{count} plays",
+  "plural.items.one": "{count} item",
+  "plural.items.other": "{count} items",
 } as const;
 
 export type TranslationKey = keyof typeof en;
 /** Other locales supply plain strings for the same key set. */
 export type Dictionary = Record<TranslationKey, string>;
+
+/** `plural.lessons` for every `plural.lessons.<category>` key English defines. */
+type PluralBaseName = {
+  [K in TranslationKey]: K extends `plural.${infer Rest}`
+    ? Rest extends `${infer B}.${string}`
+      ? `plural.${B}`
+      : never
+    : never;
+}[TranslationKey];
+
+/**
+ * What a non-English locale may provide: any subset of the English keys, plus
+ * the CLDR plural categories English itself doesn't use (Russian needs
+ * `few`/`many`, some languages need `two`).
+ */
+export type LocaleDictionary = Partial<Dictionary> &
+  Partial<Record<`${PluralBaseName}.${"zero" | "one" | "two" | "few" | "many"}`, string>>;

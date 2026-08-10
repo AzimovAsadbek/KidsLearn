@@ -88,6 +88,14 @@ export function useChildContext(): ChildContextValue {
   return ctx;
 }
 
+/**
+ * Null-safe variant for components shared with surfaces that have no family
+ * context (the admin shell renders the same sidebar without a ChildProvider).
+ */
+export function useOptionalChildContext(): ChildContextValue | null {
+  return useContext(ChildContext);
+}
+
 /** Convenience for the many screens that only need the active child's id. */
 export function useSelectedChild() {
   const { selectedChild, selectedChildId, loading } = useChildContext();

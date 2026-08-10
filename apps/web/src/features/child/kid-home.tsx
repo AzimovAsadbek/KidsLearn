@@ -49,7 +49,8 @@ export function KidHome() {
 
   /**
    * "Continue learning": started-but-unfinished first (most progress first),
-   * topped up with fresh lessons so the rail never looks empty.
+   * topped up with fresh lessons, and finally with completed ones for replay —
+   * a child who has finished everything still gets a full shelf.
    */
   const rail = useMemo(() => {
     const all = lessons.data?.items ?? [];
@@ -57,7 +58,8 @@ export function KidHome() {
       .filter((lesson) => (lesson.progress?.percent ?? 0) > 0 && !lesson.progress?.completedAt)
       .sort((a, b) => (b.progress?.percent ?? 0) - (a.progress?.percent ?? 0));
     const fresh = all.filter((lesson) => !lesson.progress || lesson.progress.percent === 0);
-    return [...inProgress, ...fresh].slice(0, 4);
+    const completed = all.filter((lesson) => lesson.progress?.completedAt);
+    return [...inProgress, ...fresh, ...completed].slice(0, 4);
   }, [lessons.data]);
 
   if (loading || !selectedChild) return <KidLoading />;

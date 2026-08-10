@@ -4,15 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PanelLeftClose, PanelLeftOpen, Sparkles, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useT } from "@/i18n/provider";
-import { useAppStore, useUnreadCount } from "@/store/app-store";
+import { useI18n, useT } from "@/i18n/provider";
+import { useAppStore } from "@/store/app-store";
+import { useUnreadCount } from "@/hooks/use-notifications";
 import { isNavActive, type NavGroup } from "@/config/navigation";
 import { CountBadge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { ProgressBar } from "@/components/ui/progress";
 import { BrandMark } from "./brand-mark";
-import { getChild } from "@/data/children";
-import { parent } from "@/data/children";
+import { useOptionalChildContext } from "@/components/providers/child-provider";
+import { useSession } from "@/components/providers/session-provider";
 
 export function SidebarNav({
   groups,
@@ -25,10 +26,11 @@ export function SidebarNav({
 }) {
   const pathname = usePathname();
   const t = useT();
+  const { plural } = useI18n();
   const unread = useUnreadCount();
 
   return (
-    <nav className="flex-1 space-y-6 px-3 py-4" aria-label="Main">
+    <nav className="flex-1 space-y-6 px-3 py-4" aria-label={t("common.mainNavigation")}>
       {groups.map((group, groupIndex) => (
         <div key={group.titleKey ?? groupIndex}>
           {group.titleKey && !collapsed ? (
@@ -60,7 +62,7 @@ export function SidebarNav({
                       collapsed ? (
                         <span
                           className="absolute right-2 top-2 h-2 w-2 rounded-full bg-danger"
-                          aria-label={`${unread} unread`}
+                          aria-label={plural("plural.unread", unread)}
                         />
                       ) : (
                         <CountBadge count={unread} />
@@ -84,9 +86,13 @@ export function SidebarNav({
 export function Sidebar({ groups, variant = "parent" }: { groups: NavGroup[]; variant?: "parent" | "admin" }) {
   const collapsed = useAppStore((s) => s.sidebarCollapsed);
   const toggle = useAppStore((s) => s.toggleSidebar);
-  const selectedChildId = useAppStore((s) => s.selectedChildId);
-  const child = getChild(selectedChildId);
+  const childCtx = useOptionalChildContext();
+  const child = childCtx?.selectedChild ?? null;
+  const { user } = useSession();
   const t = useT();
+
+  const goalDone = child?.progress?.todayLessons ?? 0;
+  const goalTotal = Math.max(1, child?.dailyGoalLessons ?? 1);
 
   return (
     <aside
@@ -107,26 +113,26 @@ export function Sidebar({ groups, variant = "parent" }: { groups: NavGroup[]; va
       {/* Contextual footer: goal card for parents, AI shortcut for admins */}
       {!collapsed ? (
         <div className="px-3 pb-3">
-          {variant === "parent" ? (
+          {variant === "parent" && child ? (
             <div className="rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 p-4 text-white shadow-card">
               <div className="flex items-center gap-2">
                 <Trophy className="h-4 w-4" aria-hidden />
                 <p className="t-label">{t("parent.todaysGoal")}</p>
               </div>
               <p className="t-h2 mt-2 font-extrabold">
-                {child.dailyGoalCompleted}/{child.dailyGoalLessons}
+                {goalDone}/{goalTotal}
               </p>
               <p className="t-caption opacity-90">{t("parent.lessonsCompleted")}</p>
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/25">
                 <div
                   className="h-full rounded-full bg-white transition-[width] duration-700"
                   style={{
-                    width: `${Math.round((child.dailyGoalCompleted / child.dailyGoalLessons) * 100)}%`,
+                    width: `${Math.min(100, Math.round((goalDone / goalTotal) * 100))}%`,
                   }}
                 />
               </div>
             </div>
-          ) : (
+          ) : variant === "parent" ? null : (
             <Link
               href="/admin/ai-generator"
               className="flex items-center gap-3 rounded-lg border border-sidebar-border bg-sidebar-hover p-3 text-sidebar-fg transition-colors hover:text-sidebar-fg-active"
@@ -145,11 +151,13 @@ export function Sidebar({ groups, variant = "parent" }: { groups: NavGroup[]; va
 
       <div className="border-t border-sidebar-border p-3">
         <div className={cn("flex items-center gap-3", collapsed && "flex-col")}>
-          <Avatar spec={parent.avatar} size="sm" />
+          <Avatar spec={{ glyph: user?.avatarGlyph || "🙂", tone: "brand" }} size="sm" />
           {!collapsed ? (
             <div className="min-w-0 flex-1">
-              <p className="t-label truncate text-sidebar-fg-active">{parent.name}</p>
-              <p className="t-caption truncate text-sidebar-section">{t("nav.parent")}</p>
+              <p className="t-label truncate text-sidebar-fg-active">{user?.name ?? ""}</p>
+              <p className="t-caption truncate text-sidebar-section">
+                {t(variant === "admin" ? "nav.admin" : "nav.parent")}
+              </p>
             </div>
           ) : null}
           <button

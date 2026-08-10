@@ -1,7 +1,7 @@
-import type { Dictionary } from "./en";
+import type { LocaleDictionary } from "./en";
 
 /** Uzbek (Latin). Missing keys fall back to English at lookup time. */
-export const uz: Partial<Dictionary> = {
+export const uz: LocaleDictionary = {
   "brand.tagline": "O'yin kabi tuyuladigan ta'lim",
 
   "common.search": "Qidirish",
@@ -283,4 +283,109 @@ export const uz: Partial<Dictionary> = {
   "state.notFoundTitle": "Voy! Bu sahifa topilmadi",
   "state.notFoundBody": "Sahifa ko'chirilgan yoki havola eskirgan bo'lishi mumkin.",
   "state.goHome": "Bosh sahifaga",
+
+  /* --- Final integration batch ----------------------------------------- */
+  "common.all": "Hammasi",
+  "common.open": "Ochish",
+  "common.mainNavigation": "Asosiy navigatsiya",
+
+  "nav.kidNavigation": "Bolalar navigatsiyasi",
+
+  "notif.markAllRead": "Hammasini o'qilgan qilish",
+  "notif.markRead": "O'qilgan deb belgilash",
+  "notif.empty": "Hozircha bildirishnomalar yo'q",
+  "notif.unread": "O'qilmagan",
+  "notif.allCaughtUp": "Hammasi ko'rib chiqilgan.",
+  "notif.filters": "Bildirishnoma filtrlari",
+  "notif.tabUnread": "O'qilmagan",
+  "notif.tabAchievements": "Yutuqlar",
+  "notif.tabContent": "Yangi kontent",
+  "notif.tabReminders": "Eslatmalar",
+  "notif.emptyUnreadTitle": "O'qilmaganlari yo'q",
+  "notif.emptyUnreadBody": "Barcha bildirishnomalar o'qilgan. Yangilik bo'lsa, xabar beramiz.",
+
+  "push.dailyReminder": "Kunlik o'qish eslatmasi",
+  "push.weeklyReport": "Haftalik hisobot",
+  "push.notConfigured": "Push-bildirishnomalar serverda hali sozlanmagan. Ilova ichidagi bildirishnomalar ishlaydi.",
+  "push.unsupported": "Brauzer push-bildirishnomalarni qo'llab-quvvatlamaydi",
+  "push.denied": "Bildirishnomalar brauzerda bloklangan",
+  "push.enabled": "Push-bildirishnomalar yoqildi",
+  "push.disabled": "Push-bildirishnomalar o'chirildi",
+  "push.disable": "Push-bildirishnomalarni o'chirish",
+
+  "auth.pinNotSetTitle": "PIN hali o'rnatilmagan",
+  "auth.pinNotSetBody": "Hisobda ota-ona PIN kodi yo'q. Bolalar rejimidan faqat kattalar chiqishi uchun uni Sozlamalarda o'rnating.",
+  "auth.pinGoSetUp": "Sozlamalarga o'tish",
+
+  "kid.explore": "Kashf qil",
+  "kid.noLessonsYet": "Bu yosh uchun hozircha darslar yo'q — keyinroq qaytib keling!",
+  "kid.noChildTitle": "Kim o'qiydi?",
+  "kid.noChildBody": "Avval kattalardan o'quvchi profilini qo'shishni so'rang.",
+  "kid.soundOn": "Ovozni yoqish",
+  "kid.soundOff": "Ovozni o'chirish",
+  "kid.lessonsSubtitle": "Bugun nimani o'rganishni tanla",
+  "kid.gamesSubtitle": "O'yna va yulduzlar to'pla",
+  "kid.booksSubtitle": "Birga o'qish uchun ertaklar",
+  "kid.videosSubtitle": "Qisqa qo'shiqlar va hikoyalar",
+  "kid.activitiesSubtitle": "Ekransiz mashg'ulotlar",
+  "kid.emptyShelfTitle": "Bu yer hozircha bo'sh",
+  "kid.emptyShelfBody": "Boshqa fanni sinab ko'r!",
+  "kid.read": "O'qish",
+  "kid.ageBand": "{band} yosh",
+  "kid.activityDraw": "Chizamiz",
+  "kid.activityTrace": "Chizib chiqamiz",
+  "kid.activitySing": "Kuylaymiz",
+  "kid.activityMove": "Harakat qilamiz",
+  "kid.activityBuild": "Quramiz",
+  "kid.printableHint": "Mashg'ulotlarni chop etish mumkin. Kattalardan ochishni so'rang:",
+
+  "lesson.noContent": "Bu darsda hozircha kontent yo'q.",
+  "lesson.hint": "Maslahat",
+
+  "game.plays": "O'yinlar soni",
+  "game.completion": "Tugatilishi",
+
+  "games.librarySubtitle": "Olti xil o'yin mexanikasi — har biri o'ziga xos o'rganish usuli uchun.",
+  "games.sorting": "O'yinlarni saralash",
+  "games.tabAll": "Barcha o'yinlar",
+  "games.tabPopular": "Eng ko'p o'ynalgan",
+  "games.tabNew": "Yaqinda yangilangan",
+
+  "filter.allSubjects": "Barcha fanlar",
+  "filter.age": "Yosh",
+  "filter.allAges": "Barcha yoshlar",
+  "filter.difficulty": "Qiyinlik",
+  "filter.allLevels": "Barcha darajalar",
+
+  "age.band1_2": "1–2 yosh",
+  "age.band3_4": "3–4 yosh",
+  "age.band5_7": "5–7 yosh",
+
+  "search.groupChildren": "Bolalar",
+  "search.groupLessons": "Darslar",
+  "search.groupGames": "O'yinlar",
+  "search.groupSubjects": "Fanlar",
+
+  "plural.lessons.one": "{count} ta dars",
+  "plural.lessons.other": "{count} ta dars",
+  "plural.lessonsPublished.one": "{count} ta chop etilgan dars",
+  "plural.lessonsPublished.other": "{count} ta chop etilgan dars",
+  "plural.games.one": "{count} ta o'yin",
+  "plural.games.other": "{count} ta o'yin",
+  "plural.stars.one": "{count} ta yulduz",
+  "plural.stars.other": "{count} ta yulduz",
+  "plural.minutes.one": "{count} daqiqa",
+  "plural.minutes.other": "{count} daqiqa",
+  "plural.days.one": "{count} kun",
+  "plural.days.other": "{count} kun",
+  "plural.children.one": "{count} ta bola",
+  "plural.children.other": "{count} ta bola",
+  "plural.unread.one": "{count} ta o'qilmagan",
+  "plural.unread.other": "{count} ta o'qilmagan",
+  "plural.pages.one": "{count} bet",
+  "plural.pages.other": "{count} bet",
+  "plural.plays.one": "{count} marta ko'rilgan",
+  "plural.plays.other": "{count} marta ko'rilgan",
+  "plural.items.one": "{count} ta element",
+  "plural.items.other": "{count} ta element",
 };
