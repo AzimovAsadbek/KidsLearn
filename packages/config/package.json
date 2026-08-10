@@ -1,0 +1,11 @@
+{
+  "name": "@kidslearn/config",
+  "version": "1.0.0",
+  "private": true,
+  "files": ["tsconfig.base.json", "tsconfig.node.json"],
+  "scripts": {
+    "lint": "echo \"no lint\"",
+    "typecheck": "echo \"no typecheck\"",
+    "test": "echo \"no tests\""
+  }
+}

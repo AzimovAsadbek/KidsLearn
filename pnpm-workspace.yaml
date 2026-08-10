@@ -1,0 +1,14 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Prisma's engines and Nest's build tooling run postinstall scripts.
+onlyBuiltDependencies:
+  - "@prisma/client"
+  - "@prisma/engines"
+  - "prisma"
+  - "argon2"
+  - "sharp"
+  - "unrs-resolver"
+  - "@tailwindcss/oxide"
+  - "esbuild"

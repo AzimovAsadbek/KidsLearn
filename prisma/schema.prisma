@@ -1,0 +1,1137 @@
+// KidsLearn — database schema
+//
+// Conventions used throughout:
+//  * Translatable content lives in a `*Translation` side table keyed by
+//    (parentId, locale). A lesson is never duplicated per language.
+//  * Anything a parent could reach is reachable from `Child.parentId`, so
+//    ownership can always be proven with a single join.
+//  * Aggregates that would otherwise need expensive scans (Progress, DailyStat,
+//    LeaderboardEntry) are materialised and updated on write.
+//  * Media binaries live in object storage; only metadata is stored here.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../packages/database/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/* ============================================================================
+   Enums
+   ========================================================================== */
+
+enum Role {
+  ADMIN
+  PARENT
+}
+
+enum AccountStatus {
+  ACTIVE
+  INVITED
+  SUSPENDED
+}
+
+enum Locale {
+  UZ
+  RU
+  EN
+}
+
+enum AgeCategory {
+  AGE_1_2
+  AGE_3_4
+  AGE_5_7
+}
+
+enum ContentStatus {
+  DRAFT
+  REVIEW
+  PUBLISHED
+  ARCHIVED
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum GameType {
+  COLOR_MATCH
+  ANIMAL_SOUNDS
+  LETTER_MATCH
+  NUMBER_GAME
+  PUZZLE
+  MEMORY
+}
+
+enum LessonBlockType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  QUESTION
+  INTERACTION
+  ANIMATION
+}
+
+enum MedalTier {
+  BRONZE
+  SILVER
+  GOLD
+  DIAMOND
+}
+
+enum NotificationType {
+  LESSON_REMINDER
+  NEW_LESSON
+  REWARD_EARNED
+  ACHIEVEMENT_EARNED
+  STREAK
+  SYSTEM
+}
+
+enum ActivityType {
+  LESSON_STARTED
+  LESSON_COMPLETED
+  GAME_PLAYED
+  ACHIEVEMENT_EARNED
+  REWARD_CLAIMED
+  STREAK_EXTENDED
+  CERTIFICATE_ISSUED
+}
+
+enum MediaKind {
+  IMAGE
+  VIDEO
+  AUDIO
+  AVATAR
+  GENERATED
+  CERTIFICATE
+}
+
+enum AiJobType {
+  IMAGE_GENERATION
+  RECOMMENDATION
+}
+
+enum AiJobStatus {
+  QUEUED
+  RUNNING
+  AWAITING_REVIEW
+  APPROVED
+  REJECTED
+  FAILED
+  PREVIEW_ONLY
+}
+
+enum RecommendationSource {
+  RULE_BASED
+  AI
+}
+
+enum LeaderboardPeriod {
+  WEEKLY
+  MONTHLY
+  ALL_TIME
+}
+
+enum CertificateStatus {
+  PENDING
+  READY
+  FAILED
+}
+
+/* ============================================================================
+   Identity
+   ========================================================================== */
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String
+  name         String
+  role         Role          @default(PARENT)
+  status       AccountStatus @default(ACTIVE)
+  locale       Locale        @default(EN)
+  phone        String?
+  avatarGlyph  String        @default("🧑")
+  avatarTone   String        @default("brand")
+
+  emailVerifiedAt DateTime?
+  lastSeenAt      DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  parentProfile      ParentProfile?
+  children           Child[]
+  refreshTokens      RefreshToken[]
+  passwordResets     PasswordResetToken[]
+  notifications      Notification[]
+  pushSubscriptions  PushSubscription[]
+  auditLogs          AuditLog[]
+  createdMedia       Media[]              @relation("MediaCreatedBy")
+  requestedAiJobs    AiJob[]              @relation("AiJobRequestedBy")
+  reviewedAiJobs     AiReview[]           @relation("AiReviewReviewer")
+
+  @@index([role, status])
+  @@index([deletedAt])
+  @@index([createdAt])
+  @@map("users")
+}
+
+model ParentProfile {
+  id     String @id @default(uuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  timezone            String   @default("Asia/Tashkent")
+  weeklyReportEnabled Boolean  @default(true)
+  reminderEnabled     Boolean  @default(true)
+  reminderHour        Int      @default(18)
+  parentPinHash       String?
+  plan                String   @default("family")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("parent_profiles")
+}
+
+/// Refresh tokens are stored hashed and rotated on every use, so a leaked
+/// database row cannot be replayed as a session.
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  family    String
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+/* ============================================================================
+   Children
+   ========================================================================== */
+
+model Child {
+  id       String @id @default(uuid())
+  parentId String
+  parent   User   @relation(fields: [parentId], references: [id], onDelete: Cascade)
+
+  name String
+  /// Age is always derived from this; never stored as a number.
+  dateOfBirth       DateTime @db.Date
+  avatarGlyph       String   @default("🧒")
+  avatarTone        String   @default("sky")
+  locale            Locale   @default(EN)
+  dailyGoalLessons  Int      @default(4)
+  favouriteSubjectId String?
+  favouriteSubject   Subject? @relation(fields: [favouriteSubjectId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  progress        Progress?
+  lessonProgress  LessonProgress[]
+  gameAttempts    GameAttempt[]
+  gameSessions    GameSession[]
+  activities      Activity[]
+  achievements    ChildAchievement[]
+  rewards         ChildReward[]
+  certificates    Certificate[]
+  recommendations Recommendation[]
+  dailyStats      DailyStat[]
+  leaderboard     LeaderboardEntry[]
+
+  @@index([parentId, deletedAt])
+  @@index([deletedAt])
+  @@map("children")
+}
+
+/* ============================================================================
+   Curriculum
+   ========================================================================== */
+
+model Subject {
+  id    String @id @default(uuid())
+  slug  String @unique
+  glyph String
+  tone  String
+  order Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  translations SubjectTranslation[]
+  categories   Category[]
+  lessons      Lesson[]
+  games        Game[]
+  children     Child[]
+  subjectStats SubjectStat[]
+  recommendations Recommendation[]
+  aiJobs       AiJob[]
+
+  @@map("subjects")
+}
+
+model SubjectTranslation {
+  id          String  @id @default(uuid())
+  subjectId   String
+  subject     Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  locale      Locale
+  name        String
+  description String  @default("")
+
+  @@unique([subjectId, locale])
+  @@map("subject_translations")
+}
+
+model Category {
+  id        String        @id @default(uuid())
+  slug      String        @unique
+  subjectId String
+  subject   Subject       @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  status    ContentStatus @default(DRAFT)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  translations CategoryTranslation[]
+  lessons      Lesson[]
+
+  @@index([subjectId, status])
+  @@map("categories")
+}
+
+model CategoryTranslation {
+  id         String   @id @default(uuid())
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  locale     Locale
+  name       String
+
+  @@unique([categoryId, locale])
+  @@map("category_translations")
+}
+
+model Lesson {
+  id         String        @id @default(uuid())
+  slug       String        @unique
+  subjectId  String
+  subject    Subject       @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  categoryId String?
+  category   Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  ageCategory     AgeCategory
+  difficulty      Difficulty    @default(EASY)
+  status          ContentStatus @default(DRAFT)
+  durationMinutes Int           @default(8)
+  xpReward        Int           @default(20)
+  starReward      Int           @default(5)
+  glyph           String        @default("📘")
+  tone            String        @default("brand")
+
+  coverMediaId String?
+  coverMedia   Media?  @relation("LessonCover", fields: [coverMediaId], references: [id], onDelete: SetNull)
+  videoMediaId String?
+  videoMedia   Media?  @relation("LessonVideo", fields: [videoMediaId], references: [id], onDelete: SetNull)
+  audioMediaId String?
+  audioMedia   Media?  @relation("LessonAudio", fields: [audioMediaId], references: [id], onDelete: SetNull)
+
+  /// Denormalised counter so lists never need a count() per row.
+  completions Int @default(0)
+
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  translations    LessonTranslation[]
+  blocks          LessonBlock[]
+  progress        LessonProgress[]
+  recommendations Recommendation[]
+
+  @@index([status, ageCategory])
+  @@index([subjectId, status])
+  @@index([categoryId])
+  @@index([deletedAt])
+  @@map("lessons")
+}
+
+model LessonTranslation {
+  id          String  @id @default(uuid())
+  lessonId    String
+  lesson      Lesson  @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  locale      Locale
+  title       String
+  description String  @default("")
+
+  @@unique([lessonId, locale])
+  @@index([locale])
+  @@map("lesson_translations")
+}
+
+/// Lessons are built from ordered typed blocks rather than one JSON document,
+/// so new block types can be added without a migration of existing content.
+model LessonBlock {
+  id       String          @id @default(uuid())
+  lessonId String
+  lesson   Lesson          @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  order    Int
+  type     LessonBlockType
+
+  glyph   String?
+  mediaId String?
+  media   Media?  @relation(fields: [mediaId], references: [id], onDelete: SetNull)
+
+  /// Type-specific presentation options (animation name, interaction preset).
+  /// Deliberately narrow: never lesson copy, which is always relational.
+  settings Json?
+
+  translations LessonBlockTranslation[]
+  question     LessonQuestion?
+
+  @@unique([lessonId, order])
+  @@index([lessonId])
+  @@map("lesson_blocks")
+}
+
+model LessonBlockTranslation {
+  id      String      @id @default(uuid())
+  blockId String
+  block   LessonBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  locale  Locale
+  title   String?
+  body    String?
+  /// The word a child is asked to repeat aloud.
+  sayIt   String?
+
+  @@unique([blockId, locale])
+  @@map("lesson_block_translations")
+}
+
+model LessonQuestion {
+  id      String      @id @default(uuid())
+  blockId String      @unique
+  block   LessonBlock @relation(fields: [blockId], references: [id], onDelete: Cascade)
+
+  translations LessonQuestionTranslation[]
+  options      LessonQuestionOption[]
+
+  @@map("lesson_questions")
+}
+
+model LessonQuestionTranslation {
+  id         String         @id @default(uuid())
+  questionId String
+  question   LessonQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  locale     Locale
+  prompt     String
+
+  @@unique([questionId, locale])
+  @@map("lesson_question_translations")
+}
+
+model LessonQuestionOption {
+  id         String         @id @default(uuid())
+  questionId String
+  question   LessonQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  glyph      String
+  order      Int            @default(0)
+  isCorrect  Boolean        @default(false)
+
+  translations LessonQuestionOptionTranslation[]
+
+  @@index([questionId])
+  @@map("lesson_question_options")
+}
+
+model LessonQuestionOptionTranslation {
+  id       String               @id @default(uuid())
+  optionId String
+  option   LessonQuestionOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  locale   Locale
+  label    String
+
+  @@unique([optionId, locale])
+  @@map("lesson_question_option_translations")
+}
+
+model LessonProgress {
+  id       String @id @default(uuid())
+  childId  String
+  child    Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+  lessonId String
+  lesson   Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  percent     Int       @default(0)
+  starsEarned Int       @default(0)
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([childId, lessonId])
+  @@index([childId, completedAt])
+  @@map("lesson_progress")
+}
+
+/* ============================================================================
+   Games
+   ========================================================================== */
+
+model Game {
+  id        String        @id @default(uuid())
+  slug      String        @unique
+  type      GameType
+  subjectId String
+  subject   Subject       @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+
+  ageCategory      AgeCategory
+  difficulty       Difficulty    @default(EASY)
+  status           ContentStatus @default(DRAFT)
+  glyph            String        @default("🎮")
+  tone             String        @default("brand")
+  roundsPerSession Int           @default(6)
+
+  /// Board layout for MEMORY and PUZZLE, which are configured rather than
+  /// authored question-by-question (face sets, puzzle scenes).
+  boardConfig Json?
+
+  plays          Int   @default(0)
+  completedPlays Int   @default(0)
+  scoreSum       Int   @default(0)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  translations GameTranslation[]
+  questions    GameQuestion[]
+  attempts     GameAttempt[]
+  sessions     GameSession[]
+
+  @@index([status, ageCategory])
+  @@index([subjectId, status])
+  @@index([type])
+  @@index([deletedAt])
+  @@map("games")
+}
+
+model GameTranslation {
+  id          String @id @default(uuid())
+  gameId      String
+  game        Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  locale      Locale
+  title       String
+  description String @default("")
+
+  @@unique([gameId, locale])
+  @@map("game_translations")
+}
+
+/// One shared question model serves all six game types: the prompt is what the
+/// child is asked, the options are what they can pick.
+model GameQuestion {
+  id     String @id @default(uuid())
+  gameId String
+  game   Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  /// Stable key used to build a session without leaking answers (e.g. "blue").
+  key         String
+  promptGlyph String?
+  promptTone  String?
+  /// Audio cue for ANIMAL_SOUNDS and read-aloud prompts.
+  audioMediaId String?
+  audioMedia   Media?  @relation(fields: [audioMediaId], references: [id], onDelete: SetNull)
+  order        Int     @default(0)
+
+  translations GameQuestionTranslation[]
+  options      GameQuestionOption[]
+  answers      GameAttemptAnswer[]
+
+  @@unique([gameId, key])
+  @@index([gameId])
+  @@map("game_questions")
+}
+
+model GameQuestionTranslation {
+  id         String       @id @default(uuid())
+  questionId String
+  question   GameQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  locale     Locale
+  prompt     String
+
+  @@unique([questionId, locale])
+  @@map("game_question_translations")
+}
+
+model GameQuestionOption {
+  id         String       @id @default(uuid())
+  questionId String
+  question   GameQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  key        String
+  glyph      String
+  tone       String?
+  isCorrect  Boolean      @default(false)
+  order      Int          @default(0)
+
+  translations GameQuestionOptionTranslation[]
+
+  @@unique([questionId, key])
+  @@index([questionId])
+  @@map("game_question_options")
+}
+
+model GameQuestionOptionTranslation {
+  id       String             @id @default(uuid())
+  optionId String
+  option   GameQuestionOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  locale   Locale
+  label    String
+
+  @@unique([optionId, locale])
+  @@map("game_question_option_translations")
+}
+
+/// A dealt session. Holding the dealt round order server-side is what lets the
+/// API validate an attempt instead of trusting the client's score.
+model GameSession {
+  id      String @id @default(uuid())
+  gameId  String
+  game    Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  childId String
+  child   Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  seed        Int
+  questionIds String[]
+  startedAt   DateTime  @default(now())
+  expiresAt   DateTime
+  consumedAt  DateTime?
+
+  attempt GameAttempt?
+
+  @@index([childId, startedAt])
+  @@index([expiresAt])
+  @@map("game_sessions")
+}
+
+model GameAttempt {
+  id      String @id @default(uuid())
+  childId String
+  child   Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+  gameId  String
+  game    Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  sessionId String?      @unique
+  session   GameSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+
+  /// Idempotency key generated by the client, so an offline replay or a retry
+  /// can never create a duplicate attempt.
+  clientAttemptId String @unique
+
+  score           Int
+  totalQuestions  Int
+  correctAnswers  Int
+  wrongAnswers    Int
+  accuracy        Int
+  durationSeconds Int
+  starsAwarded    Int  @default(0)
+  xpAwarded       Int  @default(0)
+
+  completedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  answers GameAttemptAnswer[]
+
+  @@index([childId, completedAt])
+  @@index([gameId, completedAt])
+  @@map("game_attempts")
+}
+
+model GameAttemptAnswer {
+  id         String       @id @default(uuid())
+  attemptId  String
+  attempt    GameAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  questionId String
+  question   GameQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  selectedOptionKey String?
+  correct           Boolean
+  timeMs            Int?
+
+  @@index([attemptId])
+  @@index([questionId, correct])
+  @@map("game_attempt_answers")
+}
+
+/* ============================================================================
+   Progress
+   ========================================================================== */
+
+/// One materialised row per child. Everything the dashboards read comes from
+/// here rather than from aggregating attempt tables on each request.
+model Progress {
+  id      String @id @default(uuid())
+  childId String @unique
+  child   Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  xp     Int @default(0)
+  stars  Int @default(0)
+  points Int @default(0)
+
+  lessonsCompleted  Int @default(0)
+  gamesPlayed       Int @default(0)
+  questionsAnswered Int @default(0)
+  correctAnswers    Int @default(0)
+  wrongAnswers      Int @default(0)
+  learningSeconds   Int @default(0)
+
+  currentStreak    Int     @default(0)
+  longestStreak    Int     @default(0)
+  /// Day key (YYYY-MM-DD) in the parent's configured timezone.
+  lastActiveDayKey String?
+
+  lastActivityAt DateTime?
+  updatedAt      DateTime  @updatedAt
+
+  subjectStats SubjectStat[]
+
+  @@index([xp])
+  @@index([stars])
+  @@map("progress")
+}
+
+/// Per-subject accuracy, used for subject strength and weak-topic detection.
+model SubjectStat {
+  id         String   @id @default(uuid())
+  progressId String
+  progress   Progress @relation(fields: [progressId], references: [id], onDelete: Cascade)
+  subjectId  String
+  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  totalAnswers   Int @default(0)
+  correctAnswers Int @default(0)
+  /// Snapshot of the score a week ago, so trends need no historical scan.
+  previousScore  Int @default(0)
+  score          Int @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([progressId, subjectId])
+  @@map("subject_stats")
+}
+
+/// One row per child per day, in the parent's timezone. Powers the streak, the
+/// heat grid and every windowed statistic without touching attempt tables.
+model DailyStat {
+  id      String @id @default(uuid())
+  childId String
+  child   Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  /// YYYY-MM-DD in the parent's timezone.
+  dayKey String
+  date   DateTime @db.Date
+
+  learningSeconds   Int @default(0)
+  lessonsCompleted  Int @default(0)
+  gamesPlayed       Int @default(0)
+  questionsAnswered Int @default(0)
+  correctAnswers    Int @default(0)
+  xpEarned          Int @default(0)
+  starsEarned       Int @default(0)
+
+  @@unique([childId, dayKey])
+  @@index([childId, date])
+  @@map("daily_stats")
+}
+
+model Activity {
+  id      String       @id @default(uuid())
+  childId String
+  child   Child        @relation(fields: [childId], references: [id], onDelete: Cascade)
+  type    ActivityType
+
+  title  String
+  detail String @default("")
+  glyph  String @default("✨")
+  tone   String @default("brand")
+  xp     Int?
+  stars  Int?
+  /// Loose reference to the lesson/game/achievement that produced this entry.
+  refId  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([childId, createdAt])
+  @@map("activities")
+}
+
+/* ============================================================================
+   Rewards
+   ========================================================================== */
+
+model Achievement {
+  id          String    @id @default(uuid())
+  code        String    @unique
+  tier        MedalTier
+  category    String    @default("learning")
+  glyph       String
+  tone        String
+  xpReward    Int       @default(50)
+  /// Rule the evaluator reads, e.g. { "metric": "lessonsCompleted", "gte": 10 }.
+  condition   Json
+  order       Int       @default(0)
+  active      Boolean   @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  translations AchievementTranslation[]
+  children     ChildAchievement[]
+
+  @@map("achievements")
+}
+
+model AchievementTranslation {
+  id            String      @id @default(uuid())
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  locale        Locale
+  title         String
+  description   String      @default("")
+
+  @@unique([achievementId, locale])
+  @@map("achievement_translations")
+}
+
+model ChildAchievement {
+  id            String      @id @default(uuid())
+  childId       String
+  child         Child       @relation(fields: [childId], references: [id], onDelete: Cascade)
+  achievementId String
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+
+  progress   Int       @default(0)
+  unlockedAt DateTime?
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([childId, achievementId])
+  @@index([childId, unlockedAt])
+  @@map("child_achievements")
+}
+
+model Reward {
+  id        String  @id @default(uuid())
+  code      String  @unique
+  glyph     String
+  tone      String
+  costStars Int
+  active    Boolean @default(true)
+  order     Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  translations RewardTranslation[]
+  claims       ChildReward[]
+
+  @@map("rewards")
+}
+
+model RewardTranslation {
+  id          String @id @default(uuid())
+  rewardId    String
+  reward      Reward @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+  locale      Locale
+  title       String
+  description String @default("")
+
+  @@unique([rewardId, locale])
+  @@map("reward_translations")
+}
+
+model ChildReward {
+  id       String @id @default(uuid())
+  childId  String
+  child    Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+  rewardId String
+  reward   Reward @relation(fields: [rewardId], references: [id], onDelete: Cascade)
+
+  starsSpent Int
+  claimedAt  DateTime @default(now())
+
+  @@unique([childId, rewardId])
+  @@map("child_rewards")
+}
+
+model Certificate {
+  id      String @id @default(uuid())
+  childId String
+  child   Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  serial     String            @unique
+  programme  String
+  titleKey   String            @default("cert.title")
+  xp         Int
+  stars      Int
+  status     CertificateStatus @default(PENDING)
+  mediaId    String?
+  media      Media?            @relation(fields: [mediaId], references: [id], onDelete: SetNull)
+  error      String?
+
+  issuedAt  DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([childId, issuedAt])
+  @@map("certificates")
+}
+
+/* ============================================================================
+   Leaderboard & recommendations
+   ========================================================================== */
+
+/// Materialised standings, refreshed by a scheduled job. Never recomputed per
+/// request, and it deliberately stores only public fields.
+model LeaderboardEntry {
+  id      String            @id @default(uuid())
+  period  LeaderboardPeriod
+  /// Period bucket, e.g. "2026-W32" or "2026-08" or "ALL".
+  bucket  String
+  childId String
+  child   Child             @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  displayName String
+  avatarGlyph String
+  avatarTone  String
+  stars       Int
+  xp          Int
+  rank        Int
+
+  generatedAt DateTime @default(now())
+
+  @@unique([period, bucket, childId])
+  @@index([period, bucket, rank])
+  @@map("leaderboard_entries")
+}
+
+model Recommendation {
+  id      String @id @default(uuid())
+  childId String
+  child   Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+
+  headline    String
+  rationale   String
+  actionLabel String               @default("Start lesson")
+  subjectId   String?
+  subject     Subject?             @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  lessonId    String?
+  lesson      Lesson?              @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  minutes     Int                  @default(10)
+  confidence  Int                  @default(70)
+  source      RecommendationSource @default(RULE_BASED)
+
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([childId, expiresAt])
+  @@map("recommendations")
+}
+
+/* ============================================================================
+   Media & AI
+   ========================================================================== */
+
+model Media {
+  id       String    @id @default(uuid())
+  kind     MediaKind
+  filename String
+  /// Object storage key. The public URL is derived, never stored raw.
+  storageKey String  @unique
+  mimeType String
+  sizeBytes Int
+  checksum String?
+
+  width           Int?
+  height          Int?
+  durationSeconds Int?
+
+  status    ContentStatus @default(PUBLISHED)
+  aiPrompt  String?
+  /// Denormalised usage counter for the library's "used in" column.
+  usedIn    Int           @default(0)
+
+  createdById String?
+  createdBy   User?   @relation("MediaCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  lessonCovers  Lesson[]        @relation("LessonCover")
+  lessonVideos  Lesson[]        @relation("LessonVideo")
+  lessonAudios  Lesson[]        @relation("LessonAudio")
+  lessonBlocks  LessonBlock[]
+  gameQuestions GameQuestion[]
+  certificates  Certificate[]
+  aiJobs        AiJob[]
+
+  @@index([kind, status])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@map("media")
+}
+
+model AiJob {
+  id     String      @id @default(uuid())
+  type   AiJobType
+  status AiJobStatus @default(QUEUED)
+
+  prompt      String
+  style       String?
+  ageCategory AgeCategory?
+  subjectId   String?
+  subject     Subject?     @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  /// Which implementation handled it — "preview" when nothing is configured.
+  provider String  @default("preview")
+  mediaId  String?
+  media    Media?  @relation(fields: [mediaId], references: [id], onDelete: SetNull)
+  error    String?
+  /// Provider request/response metadata, never secrets.
+  metadata Json?
+
+  requestedById String?
+  requestedBy   User?   @relation("AiJobRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  completedAt DateTime?
+
+  review AiReview?
+
+  @@index([status, createdAt])
+  @@index([type, status])
+  @@map("ai_jobs")
+}
+
+model AiReview {
+  id    String @id @default(uuid())
+  jobId String @unique
+  job   AiJob  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  reviewerId String?
+  reviewer   User?   @relation("AiReviewReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  approved   Boolean
+  note       String?
+
+  createdAt DateTime @default(now())
+
+  @@map("ai_reviews")
+}
+
+/* ============================================================================
+   Notifications
+   ========================================================================== */
+
+model Notification {
+  id     String           @id @default(uuid())
+  userId String
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type   NotificationType
+
+  title String
+  body  String
+  glyph String  @default("🔔")
+  tone  String  @default("brand")
+  href  String?
+  /// Which child the notification is about, when relevant.
+  childId String?
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model PushSubscription {
+  id     String @id @default(uuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  endpoint  String  @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime?
+  failureCount Int      @default(0)
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+/* ============================================================================
+   Platform
+   ========================================================================== */
+
+model FeatureFlag {
+  key         String   @id
+  enabled     Boolean  @default(false)
+  description String   @default("")
+  updatedAt   DateTime @updatedAt
+
+  @@map("feature_flags")
+}
+
+model AuditLog {
+  id     String  @id @default(uuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  action     String
+  resource   String
+  resourceId String?
+  metadata   Json?
+  ip         String?
+  userAgent  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([resource, resourceId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
