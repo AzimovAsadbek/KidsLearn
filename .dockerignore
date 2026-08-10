@@ -1,0 +1,27 @@
+# Never ship host installs or build output into an image build context.
+# Dependencies are installed and code is compiled inside the build stages;
+# a Windows host's pnpm symlink trees would clobber the container's own.
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+packages/database/generated
+
+.git
+.github
+.claude
+.vscode
+.idea
+
+**/*.log
+**/coverage
+**/playwright-report
+**/test-results
+
+.env
+.env.*
+!.env.example
+
+infrastructure/backups
+docker-compose*.yml
+README.md
