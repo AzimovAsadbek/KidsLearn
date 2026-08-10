@@ -42,6 +42,7 @@ export const queryKeys = {
   achievements: (childId: string) => ["children", childId, "achievements"] as const,
   rewards: (childId: string) => ["children", childId, "rewards"] as const,
   certificates: (childId: string) => ["children", childId, "certificates"] as const,
+  certificate: (id: string) => ["certificates", id] as const,
   statistics: (childId: string, preset: string) => ["children", childId, "statistics", preset] as const,
   recommendation: (childId: string) => ["children", childId, "recommendation"] as const,
   lessons: (params: Record<string, unknown>) => ["lessons", params] as const,
@@ -83,6 +84,8 @@ export const fetchAchievements = (childId: string) =>
 export const fetchRewards = (childId: string) => api.get<RewardDto[]>(`/children/${childId}/rewards`);
 export const claimReward = (childId: string, rewardId: string) =>
   api.post<RewardDto[]>(`/children/${childId}/rewards/claim`, { rewardId });
+export const fetchCertificate = (id: string) => api.get<CertificateDto>(`/certificates/${id}`);
+export const rerenderCertificate = (id: string) => api.post<CertificateDto>(`/certificates/${id}/render`);
 export const fetchCertificates = (childId: string) =>
   api.get<CertificateDto[]>(`/children/${childId}/certificates`);
 

@@ -1,11 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Download, Printer, Share2 } from "lucide-react";
+import { Download, Printer, RefreshCw, Share2 } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import { useI18n, useT } from "@/i18n/provider";
-import type { Certificate } from "@/types";
-import { getChild } from "@/data/children";
+import type { CertificateDto } from "@kidslearn/types";
 import { BrandGlyph } from "@/components/layout/brand-mark";
 import { Button } from "@/components/ui/button";
 import { useAppStore } from "@/store/app-store";
@@ -14,10 +13,9 @@ import { useAppStore } from "@/store/app-store";
  * The printable artefact. Laid out in absolute proportions so it prints as a
  * single landscape page, and it deliberately avoids photos or personal data.
  */
-export function CertificateSheet({ certificate, className }: { certificate: Certificate; className?: string }) {
+export function CertificateSheet({ certificate, className }: { certificate: CertificateDto; className?: string }) {
   const t = useT();
-  const { intlLocale } = useI18n();
-  const child = getChild(certificate.childId);
+  const { intlLocale, plural } = useI18n();
 
   return (
     <div
@@ -51,7 +49,7 @@ export function CertificateSheet({ certificate, className }: { certificate: Cert
           {t("cert.awardedTo")}
         </p>
         <p className="font-display mt-1 text-[clamp(1.6rem,5.5vw,3.2rem)] font-extrabold uppercase leading-none tracking-[0.06em] text-brand-700">
-          {child.name}
+          {certificate.childName}
         </p>
 
         <p className="mt-4 text-[clamp(0.6rem,1.2vw,0.8rem)] font-semibold uppercase tracking-[0.2em] text-[#64688a]">
@@ -60,7 +58,7 @@ export function CertificateSheet({ certificate, className }: { certificate: Cert
         <p className="mt-1 text-[clamp(0.85rem,2.2vw,1.3rem)] font-bold text-[#14152b]">{certificate.programme}</p>
 
         <div className="mt-5 flex items-center gap-6 text-[clamp(0.7rem,1.5vw,0.95rem)] font-bold text-[#14152b]">
-          <span>⭐ {certificate.stars} stars</span>
+          <span>⭐ {plural("plural.stars", certificate.stars)}</span>
           <span className="h-4 w-px bg-brand-200" aria-hidden />
           <span>⚡ {certificate.xp} XP</span>
         </div>
@@ -71,13 +69,13 @@ export function CertificateSheet({ certificate, className }: { certificate: Cert
               {t("cert.issued", { date: formatDate(certificate.issuedAt, intlLocale) })}
             </p>
             <p className="text-[clamp(0.55rem,1vw,0.7rem)] font-semibold text-[#9195b4]">
-              Serial {certificate.serial}
+              {t("cert.serial")} {certificate.serial}
             </p>
           </div>
           <div className="text-right">
             <p className="font-display text-[clamp(0.8rem,1.8vw,1.1rem)] font-bold text-brand-700">KidsLearn</p>
             <p className="border-t border-[#d3d6e6] pt-1 text-[clamp(0.55rem,1vw,0.7rem)] font-semibold text-[#9195b4]">
-              Head of Learning
+              {t("cert.signature")}
             </p>
           </div>
         </div>
@@ -86,25 +84,38 @@ export function CertificateSheet({ certificate, className }: { certificate: Cert
   );
 }
 
-export function CertificateActions({ certificate }: { certificate: Certificate }) {
+export function CertificateActions({
+  certificate,
+  onRerender,
+  rerendering,
+}: {
+  certificate: CertificateDto;
+  onRerender?: () => void;
+  rerendering?: boolean;
+}) {
   const t = useT();
   const pushToast = useAppStore((s) => s.pushToast);
 
   return (
     <div className="flex flex-wrap gap-2">
-      <Button
-        leadingIcon={<Download className="h-4 w-4" />}
-        onClick={() => {
-          // Printing to PDF is the honest capability here — no server render step
-          // is pretended at.
-          window.print();
-          pushToast({ title: "Opening print dialog", description: "Choose 'Save as PDF'.", tone: "brand", glyph: "📄" });
-        }}
-      >
-        {t("cert.download")}
-      </Button>
+      {certificate.pdfUrl ? (
+        <Button
+          leadingIcon={<Download className="h-4 w-4" />}
+          onClick={() => window.open(certificate.pdfUrl as string, "_blank", "noopener")}
+        >
+          {t("cert.download")}
+        </Button>
+      ) : certificate.status === "FAILED" && onRerender ? (
+        <Button leadingIcon={<RefreshCw className="h-4 w-4" />} onClick={onRerender} loading={rerendering}>
+          {t("cert.rerender")}
+        </Button>
+      ) : (
+        <Button disabled leadingIcon={<Download className="h-4 w-4" />}>
+          {t("cert.rendering")}
+        </Button>
+      )}
       <Button variant="secondary" leadingIcon={<Printer className="h-4 w-4" />} onClick={() => window.print()}>
-        Print
+        {t("cert.print")}
       </Button>
       <Button
         variant="secondary"
@@ -116,7 +127,7 @@ export function CertificateActions({ certificate }: { certificate: Certificate }
             return;
           }
           await navigator.clipboard.writeText(url).catch(() => undefined);
-          pushToast({ title: "Link copied", tone: "mint", glyph: "🔗" });
+          pushToast({ title: t("cert.linkCopied"), tone: "mint", glyph: "🔗" });
         }}
       >
         {t("cert.share")}
@@ -125,9 +136,8 @@ export function CertificateActions({ certificate }: { certificate: Certificate }
   );
 }
 
-export function CertificateTile({ certificate }: { certificate: Certificate }) {
+export function CertificateTile({ certificate }: { certificate: CertificateDto }) {
   const { intlLocale } = useI18n();
-  const child = getChild(certificate.childId);
 
   return (
     <Link
@@ -140,7 +150,7 @@ export function CertificateTile({ certificate }: { certificate: Certificate }) {
       <div className="p-4">
         <h3 className="t-h4 text-content">{certificate.title}</h3>
         <p className="t-caption mt-0.5 text-content-secondary">
-          {child.name} · {formatDate(certificate.issuedAt, intlLocale)}
+          {certificate.childName} · {formatDate(certificate.issuedAt, intlLocale)}
         </p>
       </div>
     </Link>

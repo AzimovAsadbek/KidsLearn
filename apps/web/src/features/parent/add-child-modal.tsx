@@ -5,9 +5,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toneStyles, type Tone } from "@/lib/tone";
-import { useT } from "@/i18n/provider";
+import { useI18n, useT } from "@/i18n/provider";
 import type { AvatarSpec } from "@/types";
-import { avatarChoices } from "@/data/children";
+import { avatarChoices } from "@/config/avatars";
 import { createChild, fetchSubjects, queryKeys } from "@/lib/api/queries";
 import { ApiError } from "@/lib/api/client";
 import { Modal } from "@/components/ui/overlay";
@@ -17,7 +17,7 @@ import { StepDots } from "@/components/ui/progress";
 import { useAppStore } from "@/store/app-store";
 import { calculateAge as deriveAge } from "@kidslearn/types";
 
-const STEPS = ["Who are they?", "Pick an avatar", "First subject"] as const;
+const STEP_KEYS = ["parent.stepWho", "parent.stepAvatar", "parent.stepSubject"] as const;
 
 /**
  * Three short steps rather than one long form — a young family is usually
@@ -25,6 +25,7 @@ const STEPS = ["Who are they?", "Pick an avatar", "First subject"] as const;
  */
 export function AddChildModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useT();
+  const { plural } = useI18n();
   const pushToast = useAppStore((s) => s.pushToast);
   const queryClient = useQueryClient();
 
@@ -51,10 +52,10 @@ export function AddChildModal({ open, onClose }: { open: boolean; onClose: () =>
 
   function validateStepOne(): boolean {
     const next: typeof errors = {};
-    if (name.trim().length < 2) next.name = "Please enter your child's name.";
-    if (!birthDate) next.birthDate = "A date of birth lets us match lessons to their age.";
-    else if (new Date(birthDate) > new Date()) next.birthDate = "That date is in the future.";
-    else if (deriveAge(birthDate) > 12) next.birthDate = "KidsLearn is designed for ages 1–7.";
+    if (name.trim().length < 2) next.name = t("parent.errorName");
+    if (!birthDate) next.birthDate = t("parent.errorDobMissing");
+    else if (new Date(birthDate) > new Date()) next.birthDate = t("parent.errorDobFuture");
+    else if (deriveAge(birthDate) > 12) next.birthDate = t("parent.errorDobRange");
     setErrors(next);
     return Object.keys(next).length === 0;
   }
@@ -65,8 +66,8 @@ export function AddChildModal({ open, onClose }: { open: boolean; onClose: () =>
       // The switcher, the dashboard and every child-scoped query read from here.
       await queryClient.invalidateQueries({ queryKey: queryKeys.children });
       pushToast({
-        title: `${child.name} is ready to learn`,
-        description: "We've matched the starter path to their age.",
+        title: t("parent.childCreated", { name: child.name }),
+        description: t("parent.childCreatedBody"),
         tone: "mint",
         glyph: "🎉",
       });
@@ -80,7 +81,7 @@ export function AddChildModal({ open, onClose }: { open: boolean; onClose: () =>
         return;
       }
       pushToast({
-        title: error instanceof ApiError ? error.message : "We couldn't add that child.",
+        title: error instanceof ApiError ? error.message : t("parent.childCreateFailed"),
         tone: "coral",
         glyph: "⚠️",
       });
@@ -90,7 +91,7 @@ export function AddChildModal({ open, onClose }: { open: boolean; onClose: () =>
   function onSubmit(event: FormEvent) {
     event.preventDefault();
     if (step === 0 && !validateStepOne()) return;
-    if (step < STEPS.length - 1) {
+    if (step < STEP_KEYS.length - 1) {
       setStep((s) => s + 1);
       return;
     }
@@ -117,7 +118,7 @@ export function AddChildModal({ open, onClose }: { open: boolean; onClose: () =>
       size="md"
       footer={
         <div className="flex w-full items-center justify-between gap-3">
-          <StepDots total={STEPS.length} current={step} />
+          <StepDots total={STEP_KEYS.length} current={step} />
           <div className="flex gap-2">
             {step > 0 ? (
               <Button variant="ghost" onClick={() => setStep((s) => s - 1)} type="button">
@@ -125,7 +126,7 @@ export function AddChildModal({ open, onClose }: { open: boolean; onClose: () =>
               </Button>
             ) : null}
             <Button type="submit" form="add-child-form" loading={create.isPending}>
-              {step === STEPS.length - 1 ? t("common.create") : t("common.next")}
+              {step === STEP_KEYS.length - 1 ? t("common.create") : t("common.next")}
             </Button>
           </div>
         </div>
@@ -133,7 +134,7 @@ export function AddChildModal({ open, onClose }: { open: boolean; onClose: () =>
     >
       <form id="add-child-form" onSubmit={onSubmit} noValidate>
         <p className="t-overline mb-4 text-content-tertiary">
-          Step {step + 1} of {STEPS.length} · {STEPS[step]}
+          {t("parent.stepCounter", { current: step + 1, total: STEP_KEYS.length })} · {t(STEP_KEYS[step])}
         </p>
 
         {step === 0 ? (
@@ -147,7 +148,7 @@ export function AddChildModal({ open, onClose }: { open: boolean; onClose: () =>
                   autoFocus
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Ali"
+                  placeholder={t("parent.childNamePlaceholder")}
                 />
               )}
             </Field>
@@ -193,7 +194,7 @@ export function AddChildModal({ open, onClose }: { open: boolean; onClose: () =>
                     type="button"
                     onClick={() => setAvatar(choice)}
                     aria-pressed={selected}
-                    aria-label={`Avatar ${index + 1}`}
+                    aria-label={t("parent.avatarNumber", { number: index + 1 })}
                     className={cn(
                       "tactile relative grid aspect-square place-items-center rounded-lg border-2 text-3xl transition-colors",
                       toneStyles[choice.tone].soft,
@@ -210,15 +211,13 @@ export function AddChildModal({ open, onClose }: { open: boolean; onClose: () =>
                 );
               })}
             </div>
-            <p className="t-caption mt-4 text-content-secondary">
-              Avatars are illustrations, never photos — children are never identifiable in KidsLearn.
-            </p>
+            <p className="t-caption mt-4 text-content-secondary">{t("parent.avatarPrivacy")}</p>
           </fieldset>
         ) : null}
 
         {step === 2 ? (
           <fieldset>
-            <legend className="t-label mb-3 text-content">Where should {name || "they"} start?</legend>
+            <legend className="t-label mb-3 text-content">{t("parent.whereStart", { name: name || t("parent.theyFallback") })}</legend>
             <div className="grid gap-2.5 sm:grid-cols-2">
               {subjects.slice(0, 6).map((subject) => {
                 const selected = subject.id === subjectId;
@@ -242,7 +241,7 @@ export function AddChildModal({ open, onClose }: { open: boolean; onClose: () =>
                     <span className="min-w-0">
                       <span className="t-body-sm block font-semibold text-content">{subject.name}</span>
                       <span className="t-caption block truncate text-content-secondary">
-                        {subject.lessonCount} lessons
+                        {plural("plural.lessons", subject.lessonCount)}
                       </span>
                     </span>
                   </button>
