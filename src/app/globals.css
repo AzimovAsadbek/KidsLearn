@@ -1,0 +1,502 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   KidsLearn Design System — Tokens
+   ----------------------------------------------------------------------------
+   Layer 1  @theme      → primitive scales (never used directly in features)
+   Layer 2  :root/.dark → semantic tokens (what components actually consume)
+   Layer 3  utilities   → shared recipes (focus ring, surfaces, scrollbars)
+   ========================================================================== */
+
+@theme {
+  /* --- Type ------------------------------------------------------------- */
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: var(--font-baloo), var(--font-jakarta), ui-rounded, system-ui, sans-serif;
+
+  /* --- Primitive palette ------------------------------------------------ */
+  /* Brand violet — the single primary across all three experiences */
+  --color-brand-50: #f5f2ff;
+  --color-brand-100: #ebe5ff;
+  --color-brand-200: #d8ccff;
+  --color-brand-300: #bda8ff;
+  --color-brand-400: #9c7cff;
+  --color-brand-500: #7c4dff;
+  --color-brand-600: #6d3ff0;
+  --color-brand-700: #5a2fd1;
+  --color-brand-800: #4a28a8;
+  --color-brand-900: #3a2080;
+
+  /* Supporting hues — each has a tint (soft) for cards + a core/deep for ink */
+  --color-sky-soft: #e6f1ff;
+  --color-sky-core: #3b8aff;
+  --color-sky-deep: #1f6ae0;
+
+  --color-mint-soft: #e0f8ee;
+  --color-mint-core: #16c47f;
+  --color-mint-deep: #0f9d63;
+
+  --color-sun-soft: #fff4d6;
+  --color-sun-core: #ffbe28;
+  --color-sun-deep: #b57e00;
+
+  --color-tangerine-soft: #ffece0;
+  --color-tangerine-core: #ff8a3d;
+  --color-tangerine-deep: #d1560e;
+
+  --color-blossom-soft: #ffe7f1;
+  --color-blossom-core: #ff5f9e;
+  --color-blossom-deep: #d62c73;
+
+  --color-coral-soft: #ffe8e9;
+  --color-coral-core: #f4515c;
+  --color-coral-deep: #cf2c38;
+
+  --color-lagoon-soft: #e0f7fa;
+  --color-lagoon-core: #1fc4d6;
+  --color-lagoon-deep: #0d8f9c;
+
+  --color-grape-soft: #f0e9ff;
+  --color-grape-core: #9257ff;
+  --color-grape-deep: #7434e8;
+
+  /* --- Radii ------------------------------------------------------------ */
+  --radius-xs: 0.5rem;
+  --radius-sm: 0.75rem;
+  --radius-md: 1rem;
+  --radius-lg: 1.25rem;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
+  --radius-3xl: 2.5rem;
+
+  /* --- Motion ----------------------------------------------------------- */
+  --ease-out-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --animate-fade-in: fade-in 0.35s var(--ease-out-soft) both;
+  --animate-rise: rise 0.45s var(--ease-out-soft) both;
+  --animate-pop: pop 0.35s var(--ease-spring) both;
+  --animate-float: float 5s ease-in-out infinite;
+  --animate-wiggle: wiggle 0.6s ease-in-out;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-pulse-ring: pulse-ring 1.8s var(--ease-out-soft) infinite;
+  --animate-spin-slow: spin 8s linear infinite;
+}
+
+/* ---------------------------------------------------------------------------
+   Semantic tokens — light
+   Dark mode is a re-designed surface stack (deep indigo), not an inversion.
+   ------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+
+  --background: #f4f5fb;
+  --background-accent: #eceefa;
+  --surface: #ffffff;
+  --surface-muted: #f4f5fa;
+  --surface-raised: #ffffff;
+  --surface-inverse: #16172c;
+  --overlay: rgb(16 17 40 / 0.45);
+
+  --text-primary: #14152b;
+  --text-secondary: #5c6084;
+  --text-tertiary: #878cad;
+  --text-inverse: #ffffff;
+
+  --border: #e6e8f2;
+  --border-strong: #d3d6e6;
+
+  --primary: var(--color-brand-500);
+  --primary-hover: var(--color-brand-600);
+  --primary-soft: var(--color-brand-50);
+  --primary-soft-strong: var(--color-brand-100);
+  --primary-on: #ffffff;
+
+  --secondary: var(--color-lagoon-deep);
+  --secondary-soft: var(--color-lagoon-soft);
+
+  --success: var(--color-mint-deep);
+  --success-soft: var(--color-mint-soft);
+  --warning: var(--color-sun-deep);
+  --warning-soft: var(--color-sun-soft);
+  --danger: var(--color-coral-deep);
+  --danger-soft: var(--color-coral-soft);
+  --info: var(--color-sky-deep);
+  --info-soft: var(--color-sky-soft);
+
+  --shadow-soft: 0 1px 2px rgb(20 21 43 / 0.04), 0 4px 16px -6px rgb(20 21 43 / 0.08);
+  --shadow-card: 0 1px 3px rgb(20 21 43 / 0.05), 0 12px 28px -14px rgb(20 21 43 / 0.16);
+  --shadow-pop: 0 18px 44px -18px rgb(20 21 43 / 0.28);
+
+  /* Sidebar — parent shell reads light, admin shell overrides below */
+  --sidebar-bg: #ffffff;
+  --sidebar-fg: #5c6084;
+  --sidebar-fg-active: #ffffff;
+  --sidebar-active: var(--color-brand-500);
+  --sidebar-hover: var(--color-brand-50);
+  --sidebar-border: #eceef7;
+  --sidebar-section: #9095b6;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: #0a0c1a;
+  --background-accent: #0f1226;
+  --surface: #14172c;
+  --surface-muted: #1b1f39;
+  --surface-raised: #1a1e37;
+  --surface-inverse: #f4f5fb;
+  --overlay: rgb(4 5 14 / 0.66);
+
+  --text-primary: #eef0fa;
+  --text-secondary: #a3a9ca;
+  --text-tertiary: #767c9f;
+  --text-inverse: #14152b;
+
+  --border: #262b48;
+  --border-strong: #333a5e;
+
+  --primary: var(--color-brand-400);
+  --primary-hover: var(--color-brand-300);
+  --primary-soft: color-mix(in oklab, var(--color-brand-400) 16%, #14172c);
+  --primary-soft-strong: color-mix(in oklab, var(--color-brand-400) 26%, #14172c);
+  --primary-on: #14061f;
+
+  --secondary: #3fd8e8;
+  --secondary-soft: color-mix(in oklab, var(--color-lagoon-core) 16%, #14172c);
+
+  --success: #3ddb98;
+  --success-soft: color-mix(in oklab, #16c47f 18%, #14172c);
+  --warning: #ffcf5c;
+  --warning-soft: color-mix(in oklab, #ffbe28 18%, #14172c);
+  --danger: #ff8a92;
+  --danger-soft: color-mix(in oklab, #f4515c 18%, #14172c);
+  --info: #7cb4ff;
+  --info-soft: color-mix(in oklab, #3b8aff 18%, #14172c);
+
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.3), 0 6px 20px -8px rgb(0 0 0 / 0.5);
+  --shadow-card: 0 2px 6px rgb(0 0 0 / 0.32), 0 16px 34px -18px rgb(0 0 0 / 0.7);
+  --shadow-pop: 0 22px 50px -20px rgb(0 0 0 / 0.8);
+
+  --sidebar-bg: #101326;
+  --sidebar-fg: #a3a9ca;
+  --sidebar-fg-active: #ffffff;
+  --sidebar-active: var(--color-brand-500);
+  --sidebar-hover: #1a1e37;
+  --sidebar-border: #1e2340;
+  --sidebar-section: #757ba6;
+}
+
+/* The admin shell keeps a deep sidebar in both themes — it is the CMS signature. */
+.shell-admin {
+  --sidebar-bg: #191b3a;
+  --sidebar-fg: #b0b4da;
+  --sidebar-fg-active: #ffffff;
+  --sidebar-active: var(--color-brand-500);
+  --sidebar-hover: #23264d;
+  --sidebar-border: #262a52;
+  --sidebar-section: #7d82b4;
+}
+.dark .shell-admin {
+  --sidebar-bg: #0f1226;
+  --sidebar-border: #1e2340;
+  --sidebar-hover: #1a1e37;
+}
+
+/* ---------------------------------------------------------------------------
+   Expose semantic tokens as Tailwind utilities (bg-surface, text-content…)
+   ------------------------------------------------------------------------- */
+@theme inline {
+  --color-background: var(--background);
+  --color-background-accent: var(--background-accent);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-inverse: var(--surface-inverse);
+  --color-overlay: var(--overlay);
+
+  --color-content: var(--text-primary);
+  --color-content-secondary: var(--text-secondary);
+  --color-content-tertiary: var(--text-tertiary);
+  --color-content-inverse: var(--text-inverse);
+
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-strong: var(--primary-soft-strong);
+  --color-primary-on: var(--primary-on);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-soft: var(--secondary-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+
+  --color-sidebar: var(--sidebar-bg);
+  --color-sidebar-fg: var(--sidebar-fg);
+  --color-sidebar-fg-active: var(--sidebar-fg-active);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-section: var(--sidebar-section);
+
+  --shadow-soft: var(--shadow-soft);
+  --shadow-card: var(--shadow-card);
+  --shadow-pop: var(--shadow-pop);
+}
+
+/* ---------------------------------------------------------------------------
+   Base
+   ------------------------------------------------------------------------- */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Typography scale — semantic classes keep headings consistent product-wide */
+  .t-display {
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 1.4rem + 2.2vw, 3rem);
+    line-height: 1.08;
+    font-weight: 800;
+    letter-spacing: -0.022em;
+  }
+  .t-h1 {
+    font-size: clamp(1.5rem, 1.2rem + 1.1vw, 1.875rem);
+    line-height: 1.2;
+    font-weight: 700;
+    letter-spacing: -0.018em;
+  }
+  .t-h2 {
+    font-size: clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem);
+    line-height: 1.25;
+    font-weight: 700;
+    letter-spacing: -0.014em;
+  }
+  .t-h3 {
+    font-size: 1.125rem;
+    line-height: 1.35;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+  .t-h4 {
+    font-size: 1rem;
+    line-height: 1.4;
+    font-weight: 650;
+    letter-spacing: -0.006em;
+  }
+  .t-body {
+    font-size: 0.9375rem;
+    line-height: 1.6;
+  }
+  .t-body-sm {
+    font-size: 0.875rem;
+    line-height: 1.55;
+  }
+  .t-caption {
+    font-size: 0.75rem;
+    line-height: 1.45;
+  }
+  .t-label {
+    font-size: 0.8125rem;
+    line-height: 1.3;
+    font-weight: 600;
+  }
+  .t-overline {
+    font-size: 0.6875rem;
+    line-height: 1.2;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+
+  /* Focus — one visible, high-contrast ring everywhere */
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    border-radius: var(--radius-xs);
+  }
+
+  ::selection {
+    background: var(--color-brand-200);
+    color: var(--color-brand-900);
+  }
+  .dark ::selection {
+    background: var(--color-brand-700);
+    color: #fff;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Shared recipes
+   ------------------------------------------------------------------------- */
+@layer components {
+  .surface-card {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .skip-link {
+    position: absolute;
+    left: 0.75rem;
+    top: -100px;
+    z-index: 100;
+    border-radius: var(--radius-sm);
+    background: var(--primary);
+    color: var(--primary-on);
+    padding: 0.6rem 1rem;
+    font-weight: 600;
+    transition: top 0.2s var(--ease-out-soft);
+  }
+  .skip-link:focus {
+    top: 0.75rem;
+  }
+
+  .scrollbar-slim {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  .scrollbar-slim::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-slim::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 99px;
+  }
+  .scrollbar-slim::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Kid surfaces sit on a warm gradient canvas rather than the SaaS grey */
+  .canvas-kid {
+    background:
+      radial-gradient(1100px 520px at 88% -8%, color-mix(in oklab, var(--color-blossom-soft) 85%, transparent), transparent 62%),
+      radial-gradient(900px 500px at 4% 4%, color-mix(in oklab, var(--color-sky-soft) 88%, transparent), transparent 60%),
+      linear-gradient(180deg, #fdfbff 0%, #f4f4ff 100%);
+  }
+  .dark .canvas-kid {
+    background:
+      radial-gradient(1100px 520px at 88% -8%, color-mix(in oklab, var(--color-grape-core) 16%, transparent), transparent 62%),
+      radial-gradient(900px 500px at 4% 4%, color-mix(in oklab, var(--color-sky-core) 12%, transparent), transparent 60%),
+      linear-gradient(180deg, #0b0d1c 0%, #0a0c1a 100%);
+  }
+
+  /* Tactile press used across every child-facing control */
+  .tactile {
+    transition:
+      transform 0.16s var(--ease-spring),
+      box-shadow 0.2s var(--ease-out-soft),
+      filter 0.2s var(--ease-out-soft);
+  }
+  .tactile:hover {
+    transform: translateY(-3px);
+  }
+  .tactile:active {
+    transform: translateY(1px) scale(0.985);
+  }
+
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      var(--surface-muted) 0%,
+      color-mix(in oklab, var(--surface-muted) 45%, var(--surface)) 50%,
+      var(--surface-muted) 100%
+    );
+    background-size: 200% 100%;
+    animation: var(--animate-shimmer);
+  }
+}
+
+@utility text-balance {
+  text-wrap: balance;
+}
+
+/* ---------------------------------------------------------------------------
+   Keyframes
+   ------------------------------------------------------------------------- */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes pop {
+  0% { opacity: 0; transform: scale(0.9); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-6deg); }
+  75% { transform: rotate(6deg); }
+}
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+@keyframes pulse-ring {
+  0% { transform: scale(0.85); opacity: 0.7; }
+  80%, 100% { transform: scale(1.7); opacity: 0; }
+}
+@keyframes confetti-fall {
+  0% { transform: translate3d(0, -12vh, 0) rotate(0deg); opacity: 1; }
+  100% { transform: translate3d(var(--drift, 0px), 104vh, 0) rotate(var(--spin, 540deg)); opacity: 0.9; }
+}
+
+/* ---------------------------------------------------------------------------
+   Reduced motion — honour the OS setting everywhere, including our keyframes
+   ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .tactile:hover,
+  .tactile:active {
+    transform: none;
+  }
+}
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: #fff; }
+}
