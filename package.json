@@ -13,7 +13,7 @@
     "build": "pnpm --filter @kidslearn/database build && pnpm --filter @kidslearn/types build && pnpm --filter @kidslearn/api build && pnpm --filter @kidslearn/web build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test",
+    "test": "pnpm --filter @kidslearn/api test",
     "test:e2e": "pnpm --filter @kidslearn/web test:e2e",
     "db:generate": "prisma generate --schema prisma/schema.prisma",
     "db:migrate": "prisma migrate dev --schema prisma/schema.prisma",
@@ -24,7 +24,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "infra:up": "docker compose up -d postgres redis minio",
     "infra:down": "docker compose down",
-    "infra:logs": "docker compose logs -f"
+    "infra:logs": "docker compose logs -f",
+    "test:integration": "pnpm --filter @kidslearn/api test:integration"
   },
   "prisma": {
     "schema": "prisma/schema.prisma",

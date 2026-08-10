@@ -1,144 +1,283 @@
 # KidsLearn
 
-An interactive learning platform for children aged 1–7 — with a playful child app, a data-rich
-parent dashboard and a full content admin, all built on one design system.
+A production-ready learning platform for children aged 1–7: a playful child app, a data-rich
+parent dashboard and a full content admin, on a real NestJS + PostgreSQL backend.
 
 > **Learning that feels like playing.**
-
----
-
-## Three experiences, one product
-
-| Surface    | Route prefix | Character                                                                      |
-| ---------- | ------------ | ------------------------------------------------------------------------------ |
-| **Child**  | `/kids`      | Playful, colourful, touch-first. Big targets, minimal text, sound and confetti. |
-| **Parent** | `/dashboard` | Modern SaaS. Progress analytics, AI recommendations, family management.        |
-| **Admin**  | `/admin`     | Professional CMS. Content workflow, media library, platform analytics.         |
-
-They share tokens, typography and components — but never the same tone of voice.
-
----
-
-## Feature map
-
-**Child** — home with mascot, lesson player, six game engines (Color Match, Animal Sounds,
-Letter Match, Number Game, Puzzle, Memory), books, videos, activities, profile, rewards, star
-shop, medals, voice control.
-
-**Parent** — dashboard with family switcher, weekly progress charts, subject strength, AI
-recommendation, activity feed, children management with a three-step add-child flow, per-child
-profile, progress and statistics with filters, achievements, rewards, leaderboard, notification
-centre with push opt-in, printable certificates, eight settings sections.
-
-**Admin** — dashboard with platform metrics, users / parents / children tables, lesson and game
-management with a draft → review → published → archived workflow, subjects, categories, media
-library (grid + list, upload, preview drawer), AI image generator with a review queue,
-achievements, rewards, announcements, leaderboard moderation, certificates, advanced analytics
-(DAU/WAU/MAU, retention, completion rates), platform settings with feature flags.
-
-**Platform** — light/dark themes, Uzbek/Russian/English, PWA with offline support, push
-notification flow, voice assistant, and loading / empty / error / offline states throughout.
-
----
-
-## Design system
-
-Tokens live in [`src/app/globals.css`](src/app/globals.css) in three layers:
-
-1. **Primitives** (`@theme`) — brand ramp plus eight supporting hues, radii, easings.
-2. **Semantic tokens** (`:root` / `.dark`) — `surface`, `content`, `border`, `primary`, `success`…
-   Dark mode is a re-designed deep-indigo surface stack, not an inversion.
-3. **Recipes** — focus ring, scrollbars, the kid canvas, the tactile press.
-
-Features never reach for a raw hue. They pick a **tone** from
-[`src/lib/tone.ts`](src/lib/tone.ts), which decides the tint, ink, fill, border, gradient and the
-hex used by SVG charts — so a subject's colour is identical on a badge, a stat card, a lesson
-tile and a chart series.
-
-Typography is a fixed scale (`.t-display` → `.t-overline`) with **Plus Jakarta Sans** for UI and
-**Baloo 2** for display and child surfaces.
 
 ---
 
 ## Architecture
 
 ```
-src/
-├── app/                  # routes, grouped by experience
-│   ├── (auth)/           # landing, login, register, reset
-│   ├── (parent)/         # dashboard, children, progress, rewards, settings…
-│   ├── (child)/kids/     # kid home, lessons, games, books, profile…
-│   └── (admin)/admin/    # console: people, content, engagement, platform
-├── components/
-│   ├── ui/               # primitives: button, card, field, overlay, data-table…
-│   ├── charts/           # hand-built SVG: area, bar, multi-line, donut, heat grid
-│   ├── layout/           # shell, sidebar, header, command search
-│   ├── kid/              # mascot, kid shell, kid loading/error
-│   ├── platform/         # install prompt, service worker, feature strip
-│   └── providers/        # theme
-├── features/             # domain slices: auth, parent, child, lessons, games,
-│                         # rewards, catalog, certificates, admin, voice
-├── data/                 # typed demo domain (deterministic, SSR-safe)
-├── hooks/                # sound, speech, voice control, media query, online status
-├── i18n/                 # flat typed dictionaries + provider
-├── config/               # navigation
-├── lib/                  # tone system, utilities, theme
-└── types/                # domain model
+                          KidsLearn
+                              │
+              ┌───────────────┼───────────────┐
+            Child           Parent          Admin
+              └───────────────┼───────────────┘
+                              │
+                     Next.js 16 (App Router)
+                              │
+                       TanStack Query
+                              │
+                        REST · /api/v1
+                              │
+                        NestJS 11
+                              │
+     ┌───────────┬────────────┼────────────┬────────────┐
+    Auth      Content       Games       Progress      Admin
+     └───────────┴────────────┼────────────┴────────────┘
+                              │
+                           Prisma
+                              │
+                        PostgreSQL 16
+                              │
+              ┌───────────────┼───────────────┐
+            Redis           MinIO         AI provider
+              │           (S3-compatible)   (optional)
+           BullMQ
 ```
 
-Charts are hand-built SVG rather than a charting dependency: full control over tokens, dark mode
-and accessibility, and every series is also readable as text.
+| Package               | What it is                                                     |
+| --------------------- | -------------------------------------------------------------- |
+| `apps/web`            | Next.js 16, React 19, Tailwind v4 — three product surfaces      |
+| `apps/api`            | NestJS 11 REST API, Swagger at `/api/docs`                      |
+| `packages/types`      | The API contract plus pure domain rules shared by both apps     |
+| `packages/database`   | Generated Prisma client                                         |
+| `packages/config`     | Shared TypeScript config                                        |
+| `prisma/`             | Schema, migrations, seed                                        |
+| `infrastructure/`     | Dockerfiles                                                     |
+
+**`packages/types` is the contract.** Age bands, level curves, star awards and streak rules live
+in `src/domain.ts` and are imported by both the API and the web app, so an optimistic UI update
+and the server's authoritative answer are computed by the same function.
 
 ---
 
-## Running it
+## Getting started
 
 ```bash
-npm install
-npm run dev
+pnpm install
+cp .env.example .env
+pnpm infra:up          # Postgres, Redis, MinIO (unusual host ports; nothing to clash with)
+pnpm db:generate
+pnpm db:migrate
+pnpm db:seed
+pnpm dev               # api on :4000, web on :3000
 ```
 
-Then open <http://localhost:3000> and pick an experience. Useful entry points:
+Then open <http://localhost:3000>. Swagger lives at <http://localhost:4000/api/docs>.
 
-- `/` — role selection
-- `/dashboard` — parent
-- `/kids` — child (grown-up PIN to exit: `2468`)
-- `/admin` — admin console
+### Development accounts
+
+> **LOCAL DEVELOPMENT ONLY.** Created by `pnpm db:seed`, never present in a real deployment.
+
+| Role   | Email                   | Password        |
+| ------ | ----------------------- | --------------- |
+| Parent | `parent@kidslearn.app`  | `kidslearn2026` |
+| Admin  | `admin@kidslearn.app`   | `kidslearn2026` |
+
+The seed also creates four other families, seven children across all three age bands, nine
+subjects, nine lessons, all six games with 35 real questions, ten achievements and ninety days of
+learning history — so every chart, streak and leaderboard has something honest to show.
+
+---
+
+## Commands
 
 ```bash
-npm run build   # production build
-npm run lint    # eslint
-npx tsc --noEmit
+pnpm dev                 # both apps
+pnpm build               # types → api → web
+pnpm lint                # eslint, zero warnings tolerated
+pnpm typecheck           # tsc across every package
+pnpm test                # unit tests
+pnpm --filter @kidslearn/api test:integration   # integration tests (needs the stack)
+pnpm test:e2e            # Playwright journeys (needs a seeded, running stack)
+
+pnpm db:migrate          # create + apply a migration
+pnpm db:deploy           # apply pending migrations (production)
+pnpm db:seed             # reset and re-seed development data
+pnpm db:studio           # Prisma Studio
+
+pnpm infra:up            # start Postgres, Redis, MinIO
+pnpm infra:down          # stop them
 ```
 
 ---
 
-## Notes on honesty
+## Database
 
-This is a complete **frontend**. Data comes from a typed, deterministic fixture layer in
-`src/data/` — the same shapes a real API would return — so every screen shows realistic content
-and server/client renders always agree.
+PostgreSQL via Prisma. Conventions the schema holds to:
 
-Two capabilities are explicitly marked in the UI rather than faked:
+- **Translatable content lives in a `*Translation` side table** keyed by `(parentId, locale)`. A
+  lesson is never duplicated per language.
+- **Lessons are ordered typed blocks**, not one JSON document, so a new block type is a migration
+  rather than a rewrite. `Json` is used only for genuinely type-specific configuration (a puzzle's
+  tiles, an achievement's condition) and is documented where it appears.
+- **Age is never stored.** `Child.dateOfBirth` is the only source; age and age band are derived on
+  every read, so a birthday changes what a child can see without a job.
+- **Aggregates are materialised.** `Progress` (per child), `DailyStat` (per child per day) and
+  `LeaderboardEntry` are written on the write path, so no dashboard scans attempt tables.
+- **Media binaries never touch Postgres** — only the object key and metadata.
+- Indexes cover every foreign key a list query filters on; soft deletes on `User`, `Child`,
+  `Lesson`, `Game` and `Media`.
 
-- **AI image generation** runs in preview mode and says so; the prompt controls, review queue and
-  approval flow are real, and a provider endpoint is configurable in admin settings.
-- **Voice control** uses the Web Speech API where the browser supports it, and hides itself
-  (never showing a dead button) where it doesn't. Every voice action also has a visible control.
+### Migrations
+
+```bash
+pnpm db:migrate --name add_something   # development
+pnpm db:deploy                         # production; also a compose service
+```
+
+CI additionally runs `prisma migrate diff --exit-code` so a schema edited without a migration
+fails the build rather than a deploy.
+
+---
+
+## API
+
+`/api/v1`, documented at `/api/docs`. Every response uses the same envelope:
+
+```json
+{ "success": true, "data": { }, "meta": { "page": 1, "limit": 20, "total": 137, "totalPages": 7 } }
+```
+
+```json
+{ "success": false, "error": { "code": "CHILD_NOT_FOUND", "message": "We couldn't find that child." } }
+```
+
+Error codes are stable strings the frontend branches on. Stack traces, Prisma messages and table
+names never reach a client.
+
+**Modules:** `auth · children · content (subjects, categories, lessons) · games · progress
+(achievements, rewards) · statistics · leaderboard · notifications · media · ai · certificates ·
+admin · feature-flags · audit · queue · health`
+
+---
+
+## Authentication and authorization
+
+- **Passwords** — Argon2id (19 MiB, t=2), above the OWASP floor. A wrong password and a missing
+  account take the same path and return the same body, so the endpoint is not an account oracle.
+- **Access token** — short-lived JWT, sent as `Authorization: Bearer`, held in memory on the
+  client only. Never in `localStorage`.
+- **Refresh token** — 384 bits of CSPRNG, stored hashed, delivered in an `HttpOnly` cookie scoped
+  to `/api/v1/auth`. Rotated on every use; presenting a spent token revokes the whole family,
+  because reuse means it leaked.
+- **Guards are global.** `JwtAuthGuard` and `RolesGuard` are registered app-wide, so a route
+  without a decorator fails closed. Public routes opt out explicitly with `@Public()`.
+- **Ownership** goes through one service, `ChildAccessService`, which every child-scoped route
+  calls. Another family's child returns **404, not 403** — 403 would confirm the id exists.
+
+Frontend route guards exist, but they are UX only. Authorization is enforced server-side and
+proven by integration tests.
+
+---
+
+## What is real, and what is not
+
+This is the part worth reading before judging any screen.
+
+**Real, backed by PostgreSQL:** authentication and sessions, children and derived ages, the
+lesson and game catalogues with their publishing workflow, game sessions and server-side grading,
+attempts with idempotency, XP, stars, levels, timezone-safe streaks, per-subject accuracy,
+achievements, rewards, the activity feed, statistics, the leaderboard, notifications, media on
+S3-compatible storage, PDF certificates, feature flags and the audit log.
+
+**Honest fallbacks, labelled in the UI:**
+
+- **AI image generation.** With no provider configured, the job is stored as `PREVIEW_ONLY`, the
+  output is a placeholder that says so, and the admin screen shows "Preview mode". Set
+  `AI_IMAGE_PROVIDER=openai` and `AI_IMAGE_API_KEY` to use a real model — the review and approval
+  pipeline around it is already the real one.
+- **Recommendations** are rule-based by default and always available. The provider interface is
+  in place; nothing about the product depends on an AI API being reachable.
+- **Web push** reports `configured: false` until VAPID keys are set, and the UI presents it as
+  needing configuration rather than offering a button that cannot work.
+- **Voice control** uses the Web Speech API where the browser has it and hides itself where it
+  does not. Every voice action also has a visible control.
+
+No endpoint returns a fabricated success for a failed integration.
+
+---
+
+## Testing
+
+| Layer           | What it covers                                                                    | Command |
+| --------------- | --------------------------------------------------------------------------------- | ------- |
+| **Unit**        | Age and band derivation, level curve, star and XP awards, streaks across midnight, months and timezones, medal thresholds | `pnpm --filter @kidslearn/api test` |
+| **Integration** | Envelope shape, auth, token rotation and replay detection, RBAC, cross-family isolation, published-only visibility, server-side grading, attempt idempotency, leaderboard privacy, AI honesty | `pnpm --filter @kidslearn/api test:integration` |
+| **E2E**         | Sign in, add child, play a game and see the score reach the dashboard, admin console, guards, four breakpoints, dark mode | `pnpm test:e2e` |
+
+Integration tests run against a dedicated `kidslearn_test` database and truncate between suites;
+`PrismaService.resetForTests()` refuses to run unless `NODE_ENV=test`.
+
+---
+
+## Security
+
+Helmet, CORS with an explicit origin allowlist, per-route rate limiting, DTO validation with
+`forbidNonWhitelisted`, global auth and role guards, ownership checks, Argon2id, rotating refresh
+tokens with reuse detection, parameterised queries through Prisma, and an audit log of
+consequential admin actions.
+
+**Uploads** are typed by magic bytes, not the declared `Content-Type`; the extension must agree
+with the content; SVGs containing script or external references are rejected; object keys are
+generated, never taken from the client's filename.
+
+**Logs** redact `authorization`, `cookie`, `set-cookie` and every password or token field.
+
+**Configuration** refuses to boot in production on a default or short JWT secret.
+
+---
+
+## Environment
+
+See [`.env.example`](.env.example) — every variable is documented there. Nothing secret is ever
+prefixed `NEXT_PUBLIC_`; the browser only ever receives the API and app URLs.
+
+Minimum to run: `DATABASE_URL`, `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`.
+Optional: `REDIS_URL` (caching and jobs degrade gracefully without it), S3 credentials,
+`AI_IMAGE_PROVIDER` + key, VAPID keys.
+
+---
+
+## Docker
+
+```bash
+# Local infrastructure only
+pnpm infra:up
+
+# Full production-like stack (builds web + api)
+docker compose -f docker-compose.prod.yml up --build
+```
+
+Both images are multi-stage, run as a non-root user, and carry health checks. The web image uses
+Next's standalone output. Migrations run as their own one-shot `migrate` service rather than from
+the API process, so a rolling deploy cannot race itself.
+
+---
+
+## CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml): install → generate → lint → typecheck →
+unit tests, then integration tests against real Postgres and Redis services, a schema-drift check,
+a production build, and both Docker images.
 
 ---
 
 ## Accessibility
 
 Semantic HTML, labelled controls, a visible focus ring, keyboard-navigable tabs, menus, dialogs
-and tables, focus trapping and restoration in overlays, `aria-live` for game and lesson feedback,
-and charts that carry their data as text. State is never encoded in colour alone — correct and
-incorrect answers also change icon and wording. `prefers-reduced-motion` removes confetti,
-floating and transitions globally.
+and tables, focus trapping and restoration in overlays, `aria-live` for lesson and game feedback,
+and charts that carry their data as text. State is never colour alone — a wrong answer changes
+icon and wording too. `prefers-reduced-motion` removes confetti, floating and transitions
+globally.
 
 ---
 
 ## Tech
 
-Next.js 16 (App Router) · React 19 · TypeScript (strict) · Tailwind CSS v4 · Zustand ·
-lucide-react
+Next.js 16 · React 19 · TypeScript strict · Tailwind CSS v4 · TanStack Query · React Hook Form ·
+Zod · NestJS 11 · Prisma 6 · PostgreSQL 16 · Redis · BullMQ · MinIO · Argon2 · Swagger · Vitest ·
+Playwright · Docker

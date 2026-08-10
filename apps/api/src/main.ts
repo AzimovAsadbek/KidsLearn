@@ -104,14 +104,12 @@ async function bootstrap(): Promise<void> {
   });
 
   await app.listen(appConfig.port, "0.0.0.0");
-  // eslint-disable-next-line no-console
   console.log(`KidsLearn API listening on http://localhost:${appConfig.port}/api/v1 (docs: /api/docs)`);
 }
 
 bootstrap().catch((error: unknown) => {
   // Startup failures must be visible even though logs are buffered until the
   // logger is attached; otherwise the process just exits in silence.
-  // eslint-disable-next-line no-console
   console.error("Failed to start KidsLearn API:", error);
   process.exit(1);
 });

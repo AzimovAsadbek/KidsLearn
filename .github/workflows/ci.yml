@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Test-only values. Real secrets never appear in CI configuration.
+  DATABASE_URL: postgresql://kidslearn:kidslearn_ci@localhost:5432/kidslearn_test?schema=public
+  REDIS_URL: redis://localhost:6379
+  JWT_ACCESS_SECRET: ci_only_access_secret_at_least_32_characters_long
+  JWT_REFRESH_SECRET: ci_only_refresh_secret_at_least_32_characters_long
+  APP_TIMEZONE: Asia/Tashkent
+  NEXT_PUBLIC_API_URL: http://localhost:4000/api/v1
+
+jobs:
+  quality:
+    name: Lint, typecheck and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The Prisma client and the shared contract types are inputs to both the
+      # typecheck and the build, so they are generated before anything else.
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Build shared packages
+        run: pnpm --filter @kidslearn/types build
+
+      - name: Lint
+        run: pnpm -r lint
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Unit tests
+        run: pnpm --filter @kidslearn/api test
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: kidslearn
+          POSTGRES_PASSWORD: kidslearn_ci
+          POSTGRES_DB: kidslearn_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U kidslearn"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm --filter @kidslearn/types build
+
+      - name: Apply migrations
+        run: pnpm db:deploy
+
+      - name: Verify the schema matches the migrations
+        # Catches a schema edited without a migration, which would pass tests
+        # locally and fail on deploy.
+        run: pnpm exec prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url "$DATABASE_URL" --exit-code
+
+      - name: Integration tests
+        run: pnpm --filter @kidslearn/api test:integration
+        env:
+          NODE_ENV: test
+
+  build:
+    name: Production build
+    runs-on: ubuntu-latest
+    needs: [quality]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm build
+
+  docker:
+    name: Docker images
+    runs-on: ubuntu-latest
+    needs: [quality, integration]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infrastructure/docker/api.Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build the web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infrastructure/docker/web.Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
