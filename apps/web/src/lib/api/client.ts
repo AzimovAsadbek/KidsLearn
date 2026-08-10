@@ -191,5 +191,47 @@ export const api = {
   async delete<T>(path: string, options?: RequestOptions): Promise<T> {
     return (await execute<T>(path, { ...options, method: "DELETE" })).data;
   },
+  /**
+   * Multipart upload with progress. Uses XHR because fetch still has no upload
+   * progress events; auth and the envelope behave exactly like execute().
+   */
+  upload<T>(path: string, form: FormData, onProgress?: (percent: number) => void): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `${BASE_URL}${path.startsWith("/") ? path : `/${path}`}`);
+      xhr.withCredentials = true;
+      const token = getAccessToken();
+      if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable && onProgress) {
+          onProgress(Math.round((event.loaded / event.total) * 100));
+        }
+      };
+
+      xhr.onload = () => {
+        try {
+          const payload = JSON.parse(xhr.responseText) as ApiResponse<T>;
+          if (xhr.status >= 200 && xhr.status < 300 && payload.success) {
+            resolve(payload.data);
+            return;
+          }
+          const failure = payload as ApiFailure;
+          reject(
+            new ApiError(
+              failure.error?.code ?? "INTERNAL_ERROR",
+              failure.error?.message ?? "Upload failed.",
+              xhr.status,
+              failure.error?.details,
+            ),
+          );
+        } catch {
+          reject(new ApiError("INTERNAL_ERROR", "Upload failed.", xhr.status));
+        }
+      };
+      xhr.onerror = () => reject(new ApiError("INTERNAL_ERROR", "Upload failed. Check your connection.", 0));
+      xhr.send(form);
+    });
+  },
   refreshSession,
 };

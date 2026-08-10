@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, HttpStatus, Patch, Post, Req, Res } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiTags, ApiUnauthorizedResponse } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import type { Request, Response } from "express";
@@ -12,8 +12,11 @@ import {
   ChangePasswordDto,
   ForgotPasswordDto,
   LoginDto,
+  ParentSettingsDto,
+  PinDto,
   RegisterDto,
   ResetPasswordDto,
+  UpdateProfileDto,
   SessionResponseDto,
 } from "./dto/auth.dto";
 
@@ -139,6 +142,45 @@ export class AuthController {
   @ApiOperation({ summary: "Set a new password using a reset token" })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     await this.auth.resetPassword(dto.token, dto.password);
+  }
+
+  @Patch("profile")
+  @ApiOperation({ summary: "Update the signed-in user's profile" })
+  @ApiEnvelopeResponse(AuthUserResponse)
+  async updateProfile(@CurrentUser() user: RequestUser, @Body() dto: UpdateProfileDto) {
+    return this.auth.updateProfile(user.id, dto);
+  }
+
+  @Get("parent-settings")
+  @ApiOperation({ summary: "Reminder, report and PIN settings for the family account" })
+  async parentSettings(@CurrentUser() user: RequestUser) {
+    return this.auth.parentSettings(user.id);
+  }
+
+  @Patch("parent-settings")
+  @ApiOperation({ summary: "Update reminder and report preferences" })
+  async updateParentSettings(@CurrentUser() user: RequestUser, @Body() dto: ParentSettingsDto) {
+    return this.auth.updateParentSettings(user.id, dto);
+  }
+
+  @Post("parent-pin")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: "Set the PIN that gates leaving kid mode" })
+  async setPin(@CurrentUser() user: RequestUser, @Body() dto: PinDto) {
+    await this.auth.setParentPin(user.id, dto.pin);
+  }
+
+  @Post("parent-pin/verify")
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @ApiOperation({
+    summary: "Verify the parent PIN",
+    description: "`configured: false` means no PIN has been set yet; the client should offer to set one instead of blocking.",
+  })
+  async verifyPin(@CurrentUser() user: RequestUser, @Body() dto: PinDto) {
+    const configured = await this.auth.pinConfigured(user.id);
+    if (!configured) return { configured: false, valid: false };
+    return { configured: true, valid: await this.auth.verifyParentPin(user.id, dto.pin) };
   }
 
   @Post("change-password")

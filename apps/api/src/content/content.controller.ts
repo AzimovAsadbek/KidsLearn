@@ -44,6 +44,20 @@ export class SaveLessonProgressDto {
   percent!: number;
 }
 
+export class GradeLessonAnswerDto {
+  @ApiProperty({ format: "uuid" })
+  @IsUUID()
+  childId!: string;
+
+  @ApiProperty({ format: "uuid" })
+  @IsUUID()
+  questionId!: string;
+
+  @ApiProperty({ format: "uuid" })
+  @IsUUID()
+  selectedOptionId!: string;
+}
+
 export class LessonDetailQueryDto {
   @ApiPropertyOptional({ format: "uuid" })
   @IsOptional()
@@ -192,6 +206,19 @@ export class LessonsController {
     @Body() dto: SaveLessonProgressDto,
   ) {
     await this.lessons.saveProgress(user, id, dto.childId, dto.percent);
+  }
+
+  @Post(":id/answers")
+  @ApiOperation({
+    summary: "Grade one lesson answer",
+    description: "Immediate right/wrong feedback. The answer key never ships with the lesson payload.",
+  })
+  async gradeAnswer(
+    @CurrentUser() user: RequestUser,
+    @Param("id") id: string,
+    @Body() dto: GradeLessonAnswerDto,
+  ) {
+    return this.lessons.gradeAnswer(user, id, dto.childId, dto.questionId, dto.selectedOptionId);
   }
 
   @Post(":id/complete")

@@ -180,6 +180,55 @@ export class AuthService {
     ]);
   }
 
+  async updateProfile(
+    userId: string,
+    dto: { name?: string; phone?: string | null; locale?: Locale; avatarGlyph?: string; avatarTone?: string },
+  ): Promise<AuthUser> {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        name: dto.name,
+        phone: dto.phone,
+        locale: dto.locale ? toPrismaLocale(dto.locale) : undefined,
+        avatarGlyph: dto.avatarGlyph,
+        avatarTone: dto.avatarTone,
+      },
+    });
+    return AuthService.toAuthUser(user);
+  }
+
+  async parentSettings(userId: string) {
+    const profile = await this.prisma.parentProfile.upsert({
+      where: { userId },
+      create: { userId },
+      update: {},
+    });
+    return {
+      timezone: profile.timezone,
+      reminderEnabled: profile.reminderEnabled,
+      reminderHour: profile.reminderHour,
+      weeklyReportEnabled: profile.weeklyReportEnabled,
+      hasPin: profile.parentPinHash !== null,
+    };
+  }
+
+  async updateParentSettings(
+    userId: string,
+    dto: { timezone?: string; reminderEnabled?: boolean; reminderHour?: number; weeklyReportEnabled?: boolean },
+  ) {
+    await this.prisma.parentProfile.upsert({
+      where: { userId },
+      create: { userId, ...dto },
+      update: dto,
+    });
+    return this.parentSettings(userId);
+  }
+
+  async pinConfigured(userId: string): Promise<boolean> {
+    const profile = await this.prisma.parentProfile.findUnique({ where: { userId } });
+    return profile?.parentPinHash !== null && profile !== null;
+  }
+
   /** Constant-time compare for the parent PIN that gates kid-mode exit. */
   async verifyParentPin(userId: string, pin: string): Promise<boolean> {
     const profile = await this.prisma.parentProfile.findUnique({ where: { userId } });

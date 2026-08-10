@@ -15,6 +15,7 @@ export const JOBS = {
   DAILY_REMINDER: "daily-reminder",
   WEEKLY_REPORT: "weekly-report",
   NEW_LESSON_BROADCAST: "new-lesson-broadcast",
+  BROADCAST_PUSH: "broadcast-push",
   GENERATE_IMAGE: "generate-image",
   GENERATE_RECOMMENDATION: "generate-recommendation",
   RENDER_CERTIFICATE: "render-certificate",

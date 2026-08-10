@@ -1,5 +1,7 @@
 import type {
   AchievementDto,
+  AuthUser,
+  LessonCompletionResultDto,
   ActivityDto,
   AdminAnalyticsDto,
   AdminMetricsDto,
@@ -96,6 +98,7 @@ export const fetchLeaderboard = (period: string, childId?: string) =>
 
 export interface LessonListParams {
   childId?: string;
+  locale?: string;
   subjectId?: string;
   ageCategory?: string;
   difficulty?: string;
@@ -107,12 +110,33 @@ export interface LessonListParams {
 
 export const fetchLessons = (params: LessonListParams) =>
   api.getPage<LessonDto>("/lessons", { query: params as Record<string, string | number | undefined> });
-export const fetchLesson = (idOrSlug: string, childId?: string) =>
-  api.get<LessonDto>(`/lessons/${idOrSlug}`, { query: { childId } });
+export const fetchLesson = (idOrSlug: string, childId?: string, locale?: string) =>
+  api.get<LessonDto>(`/lessons/${idOrSlug}`, { query: { childId, locale } });
 export const saveLessonProgress = (lessonId: string, childId: string, percent: number) =>
   api.post<void>(`/lessons/${lessonId}/progress`, { childId, percent });
 export const changeLessonStatus = (id: string, status: string) =>
   api.patch<LessonDto>(`/lessons/${id}/status`, { status });
+export const upsertLesson = (body: unknown, id?: string) =>
+  id ? api.patch<LessonDto>(`/lessons/${id}`, body) : api.post<LessonDto>("/lessons", body);
+export const deleteLesson = (id: string) => api.delete<void>(`/lessons/${id}`);
+export const fetchCategories = (params: Record<string, string | number | undefined>) =>
+  api.getPage<{
+    id: string;
+    slug: string;
+    name: string;
+    subjectId: string;
+    status: string;
+    itemCount: number;
+    updatedAt: string;
+  }>("/categories", { query: params });
+export const gradeLessonAnswer = (lessonId: string, childId: string, questionId: string, selectedOptionId: string) =>
+  api.post<{ correct: boolean; correctOptionId: string }>(`/lessons/${lessonId}/answers`, {
+    childId,
+    questionId,
+    selectedOptionId,
+  });
+export const completeLesson = (lessonId: string, body: unknown) =>
+  api.post<LessonCompletionResultDto>(`/lessons/${lessonId}/complete`, body);
 
 /* --- Games ---------------------------------------------------------------- */
 
@@ -164,6 +188,82 @@ export const fetchMedia = (params: Record<string, string | number | undefined>) 
 /* --- AI ------------------------------------------------------------------- */
 
 export const fetchAiStatus = () => api.get<AiProviderStatusDto>("/ai/status");
+
+/* --- Profile & settings ---------------------------------------------------- */
+
+export interface ParentSettingsDto {
+  timezone: string;
+  reminderEnabled: boolean;
+  reminderHour: number;
+  weeklyReportEnabled: boolean;
+  hasPin: boolean;
+}
+
+export const updateProfile = (body: unknown) => api.patch<AuthUser>("/auth/profile", body);
+export const changePassword = (body: unknown) => api.post<void>("/auth/change-password", body);
+export const fetchParentSettings = () => api.get<ParentSettingsDto>("/auth/parent-settings");
+export const updateParentSettings = (body: unknown) => api.patch<ParentSettingsDto>("/auth/parent-settings", body);
+export const setParentPin = (pin: string) => api.post<void>("/auth/parent-pin", { pin });
+export const verifyParentPin = (pin: string) =>
+  api.post<{ configured: boolean; valid: boolean }>("/auth/parent-pin/verify", { pin });
+export const subscribePush = (subscription: unknown) => api.post<void>("/notifications/push/subscribe", subscription);
+export const unsubscribePush = (endpoint: string) => api.post<void>("/notifications/push/unsubscribe", { endpoint });
+
+/* --- Admin definitions ------------------------------------------------------ */
+
+export interface AdminAchievementRow {
+  id: string;
+  code: string;
+  tier: string;
+  category: string;
+  glyph: string;
+  tone: string;
+  xpReward: number;
+  active: boolean;
+  title: string;
+  description: string;
+  unlockedCount: number;
+  unlockRate: number;
+}
+
+export interface AdminRewardRow {
+  id: string;
+  code: string;
+  glyph: string;
+  tone: string;
+  costStars: number;
+  active: boolean;
+  title: string;
+  description: string;
+  claimCount: number;
+}
+
+export interface AdminCertificateRow {
+  id: string;
+  childId: string;
+  childName: string;
+  programme: string;
+  serial: string;
+  xp: number;
+  stars: number;
+  status: string;
+  issuedAt: string;
+}
+
+export const fetchAdminAchievements = () => api.get<AdminAchievementRow[]>("/admin/achievements");
+export const fetchAdminRewards = () => api.get<AdminRewardRow[]>("/admin/rewards");
+export const fetchAdminCertificates = (params: Record<string, string | number | undefined>) =>
+  api.getPage<AdminCertificateRow>("/admin/certificates", { query: params });
+export const broadcastNotification = (body: { title: string; body: string; href?: string }) =>
+  api.post<{ reach: number }>("/admin/notifications/broadcast", body);
+export const deleteMedia = (id: string) => api.delete<void>(`/media/${id}`);
+export const uploadMedia = (file: File, kind: string | undefined, onProgress?: (percent: number) => void) => {
+  const form = new FormData();
+  form.append("file", file);
+  return api.upload<MediaDto>(`/media/upload${kind ? `?kind=${kind}` : ""}`, form, onProgress);
+};
+export const upsertSubject = (body: unknown) => api.post("/subjects", body);
+export const upsertCategory = (body: unknown) => api.post("/categories", body);
 export const generateAiImage = (body: unknown) => api.post<AiJobDto>("/ai/images", body);
 export const fetchAiJobs = (params: Record<string, string | number | undefined>) =>
   api.getPage<AiJobDto>("/ai/jobs", { query: params });

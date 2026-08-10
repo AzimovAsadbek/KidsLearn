@@ -18,6 +18,9 @@ import { pickTranslation, toPrismaLocale } from "../common/utils/locale";
 import { StorageService } from "../media/storage.service";
 import { ChildAccessService } from "../children/child-access.service";
 import { ProgressService } from "../progress/progress.service";
+import { InjectQueue } from "@nestjs/bullmq";
+import { Queue } from "bullmq";
+import { JOBS, QUEUES } from "../queue/queue.module";
 import type { RequestUser } from "../common/decorators";
 import type { ChangeStatusDto, CompleteLessonDto, LessonQueryDto, UpsertLessonDto } from "./dto/content.dto";
 import { slugify } from "../common/utils/slug";
@@ -40,6 +43,7 @@ export class LessonsService {
     private readonly storage: StorageService,
     private readonly childAccess: ChildAccessService,
     private readonly progress: ProgressService,
+    @InjectQueue(QUEUES.NOTIFICATIONS) private readonly notificationsQueue: Queue,
   ) {}
 
   /**
@@ -232,6 +236,20 @@ export class LessonsService {
       include: lessonInclude,
     });
 
+    // First publication notifies every family — queued, so a slow push
+    // provider can never block the editor's save. The deterministic job id
+    // makes re-publishing after an archive a no-op.
+    if (goingLive && !current.publishedAt) {
+      const title = pickTranslation(lesson.translations, toPrismaLocale("en"))?.title ?? lesson.slug;
+      await this.notificationsQueue
+        .add(
+          JOBS.NEW_LESSON_BROADCAST,
+          { lessonId: lesson.id, title, slug: lesson.slug },
+          { jobId: `new-lesson-${lesson.id}` },
+        )
+        .catch(() => undefined);
+    }
+
     await this.invalidate();
     return this.toDto(lesson, toPrismaLocale("en"), null);
   }
@@ -251,6 +269,33 @@ export class LessonsService {
       create: { childId, lessonId, percent: clamped },
       update: { percent: { set: clamped } },
     });
+  }
+
+  /**
+   * Grades a single lesson question so the child gets immediate feedback.
+   *
+   * The lesson payload never includes the key for non-admins; the client only
+   * learns whether a pick was right after making it. Accuracy still gets
+   * re-graded in full on completion.
+   */
+  async gradeAnswer(
+    user: RequestUser,
+    lessonId: string,
+    childId: string,
+    questionId: string,
+    selectedOptionId: string,
+  ): Promise<{ correct: boolean; correctOptionId: string }> {
+    await this.childAccess.assertAccess(user, childId);
+
+    const question = await this.prisma.lessonQuestion.findFirst({
+      where: { id: questionId, block: { lessonId } },
+      include: { options: { select: { id: true, isCorrect: true } } },
+    });
+    if (!question) throw AppException.notFound("That question isn't part of this lesson.");
+
+    const chosen = question.options.find((option) => option.id === selectedOptionId);
+    const correct = question.options.find((option) => option.isCorrect);
+    return { correct: Boolean(chosen?.isCorrect), correctOptionId: correct?.id ?? "" };
   }
 
   /**

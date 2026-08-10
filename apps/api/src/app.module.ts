@@ -28,6 +28,7 @@ import { AiModule } from "./ai/ai.module";
 import { CertificatesModule } from "./certificates/certificates.module";
 import { AdminModule } from "./admin/admin.module";
 import { QueueModule } from "./queue/queue.module";
+import { JobsModule } from "./jobs/jobs.module";
 
 @Module({
   imports: [
@@ -95,6 +96,7 @@ import { QueueModule } from "./queue/queue.module";
     PrismaModule,
     RedisModule,
     QueueModule,
+    JobsModule,
     AuditModule,
     FeatureFlagsModule,
     AuthModule,

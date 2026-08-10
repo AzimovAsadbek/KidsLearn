@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Transform } from "class-transformer";
-import { IsEmail, IsEnum, IsOptional, IsString, Matches, MaxLength, MinLength } from "class-validator";
+import { Transform, Type } from "class-transformer";
+import { IsBoolean, IsEmail, IsEnum, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min, MinLength } from "class-validator";
 import { Locale } from "@kidslearn/types";
 
 const PASSWORD_RULE = /^(?=.*[a-z])(?=.*\d).{8,72}$/;
@@ -80,6 +80,71 @@ export class ChangePasswordDto {
   @IsString()
   @Matches(PASSWORD_RULE, { message: PASSWORD_MESSAGE })
   newPassword!: string;
+}
+
+export class UpdateProfileDto {
+  @ApiPropertyOptional({ maxLength: 80 })
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(80)
+  name?: string;
+
+  @ApiPropertyOptional({ maxLength: 32, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  phone?: string;
+
+  @ApiPropertyOptional({ enum: ["uz", "ru", "en"] })
+  @IsOptional()
+  @IsEnum(Locale)
+  locale?: Locale;
+
+  @ApiPropertyOptional({ maxLength: 16 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  avatarGlyph?: string;
+
+  @ApiPropertyOptional({ maxLength: 24 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(24)
+  avatarTone?: string;
+}
+
+export class ParentSettingsDto {
+  @ApiPropertyOptional({ example: "Asia/Tashkent", description: "IANA timezone for streaks and reminders" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  timezone?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  reminderEnabled?: boolean;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 23 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(23)
+  reminderHour?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  weeklyReportEnabled?: boolean;
+}
+
+export class PinDto {
+  @ApiProperty({ example: "2468", description: "4-8 digits" })
+  @IsString()
+  @Matches(/^\d{4,8}$/, { message: "pin must be 4 to 8 digits" })
+  pin!: string;
 }
 
 /* --- Swagger response models --------------------------------------------- */

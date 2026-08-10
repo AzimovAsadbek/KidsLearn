@@ -1,6 +1,6 @@
-import { Body, Controller, Get, Injectable, Module, Param, Patch, Query } from "@nestjs/common";
+import { Body, Controller, Get, Injectable, Module, Param, Patch, Post, Query } from "@nestjs/common";
 import { ApiOperation, ApiParam, ApiProperty, ApiPropertyOptional, ApiTags } from "@nestjs/swagger";
-import { IsEnum, IsOptional } from "class-validator";
+import { IsEnum, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 import type { AdminAnalyticsDto, AdminMetricsDto } from "@kidslearn/types";
 import { Prisma } from "@kidslearn/database";
 import { PrismaService } from "../common/prisma/prisma.service";
@@ -10,6 +10,10 @@ import { SearchQueryDto, paginationMeta, safeOrderBy } from "../common/dto/pagin
 import { withMeta } from "../common/http/response.interceptor";
 import { AuditActions, AuditService } from "../audit/audit.module";
 import { pickTranslation } from "../common/utils/locale";
+import { InjectQueue } from "@nestjs/bullmq";
+import { Queue } from "bullmq";
+import { NotificationsService } from "../notifications/notifications.service";
+import { JOBS, QUEUES } from "../queue/queue.module";
 import { Locale as PrismaLocale } from "@kidslearn/database";
 
 export class AdminUserQueryDto extends SearchQueryDto {
@@ -50,6 +54,26 @@ export class AdminUserResponse {
   @ApiProperty({ nullable: true, type: String }) lastSeenAt!: string | null;
 }
 
+export class BroadcastDto {
+  @ApiProperty({ maxLength: 120 })
+  @IsString()
+  @MinLength(3)
+  @MaxLength(120)
+  title!: string;
+
+  @ApiProperty({ maxLength: 500 })
+  @IsString()
+  @MinLength(3)
+  @MaxLength(500)
+  body!: string;
+
+  @ApiPropertyOptional({ maxLength: 200 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  href?: string;
+}
+
 const ANALYTICS_TTL_SECONDS = 300;
 
 @Injectable()
@@ -57,6 +81,8 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
+    private readonly notifications: NotificationsService,
+    @InjectQueue(QUEUES.NOTIFICATIONS) private readonly queue: Queue,
   ) {}
 
   async listUsers(query: AdminUserQueryDto) {
@@ -249,6 +275,24 @@ export class AdminService {
     });
   }
 
+  /** In-app rows land immediately; push fan-out runs as a background job. */
+  async broadcast(dto: { title: string; body: string; href?: string }) {
+    const reach = await this.notifications.notifyAllParents({
+      type: "SYSTEM",
+      title: dto.title,
+      body: dto.body,
+      glyph: "📣",
+      tone: "brand",
+      href: dto.href ?? null,
+    });
+    await this.queue.add(
+      JOBS.BROADCAST_PUSH,
+      { title: dto.title, body: dto.body, href: dto.href },
+      { jobId: `broadcast-${Date.now()}` },
+    );
+    return reach;
+  }
+
   async auditLog(skip: number, take: number) {
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.auditLog.findMany({
@@ -276,6 +320,78 @@ export class AdminService {
     };
   }
 
+  /** Achievement definitions with unlock counts, for the admin table. */
+  async achievementDefinitions() {
+    const rows = await this.prisma.achievement.findMany({
+      orderBy: [{ order: "asc" }, { code: "asc" }],
+      include: {
+        translations: true,
+        _count: { select: { children: { where: { unlockedAt: { not: null } } } } },
+      },
+    });
+    const totalChildren = Math.max(1, await this.prisma.child.count({ where: { deletedAt: null } }));
+    return rows.map((row) => ({
+      id: row.id,
+      code: row.code,
+      tier: row.tier,
+      category: row.category,
+      glyph: row.glyph,
+      tone: row.tone,
+      xpReward: row.xpReward,
+      active: row.active,
+      title: pickTranslation(row.translations, PrismaLocale.EN)?.title ?? row.code,
+      description: pickTranslation(row.translations, PrismaLocale.EN)?.description ?? "",
+      unlockedCount: row._count.children,
+      unlockRate: Math.round((row._count.children / totalChildren) * 100),
+    }));
+  }
+
+  /** Reward definitions with claim counts. */
+  async rewardDefinitions() {
+    const rows = await this.prisma.reward.findMany({
+      orderBy: [{ order: "asc" }, { costStars: "asc" }],
+      include: { translations: true, _count: { select: { claims: true } } },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      code: row.code,
+      glyph: row.glyph,
+      tone: row.tone,
+      costStars: row.costStars,
+      active: row.active,
+      title: pickTranslation(row.translations, PrismaLocale.EN)?.title ?? row.code,
+      description: pickTranslation(row.translations, PrismaLocale.EN)?.description ?? "",
+      claimCount: row._count.claims,
+    }));
+  }
+
+  /** Every certificate the platform has issued. */
+  async certificates(skip: number, take: number) {
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.certificate.findMany({
+        orderBy: { issuedAt: "desc" },
+        skip,
+        take,
+        include: { child: { select: { name: true } } },
+      }),
+      this.prisma.certificate.count(),
+    ]);
+    return {
+      total,
+      items: rows.map((row) => ({
+        id: row.id,
+        childId: row.childId,
+        childName: row.child.name,
+        programme: row.programme,
+        serial: row.serial,
+        xp: row.xp,
+        stars: row.stars,
+        status: row.status,
+        issuedAt: row.issuedAt.toISOString(),
+      })),
+    };
+  }
+
   private bucketByWeek(dates: Date[]) {
     const buckets = new Map<string, number>();
     for (const date of dates) {
@@ -296,6 +412,7 @@ export class AdminController {
   constructor(
     private readonly admin: AdminService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   @Get("metrics")
@@ -352,6 +469,46 @@ export class AdminController {
       });
     }
     return updated;
+  }
+
+  @Get("achievements")
+  @ApiOperation({ summary: "Achievement definitions with global unlock rates" })
+  async achievements() {
+    return this.admin.achievementDefinitions();
+  }
+
+  @Get("rewards")
+  @ApiOperation({ summary: "Reward definitions with claim counts" })
+  async rewards() {
+    return this.admin.rewardDefinitions();
+  }
+
+  @Get("certificates")
+  @ApiOperation({ summary: "Every issued certificate" })
+  async certificates(@Query() query: SearchQueryDto) {
+    const { items, total } = await this.admin.certificates(query.skip, query.limit);
+    return withMeta(items, paginationMeta(total, query.page, query.limit));
+  }
+
+  @Post("notifications/broadcast")
+  @ApiOperation({
+    summary: "Send an announcement to every parent",
+    description: "Creates in-app notifications immediately and queues push delivery in the background.",
+  })
+  async broadcast(
+    @Body() dto: BroadcastDto,
+    @CurrentUser() user: RequestUser,
+    @ClientIp() ip: string | null,
+  ) {
+    const reach = await this.admin.broadcast(dto);
+    this.audit.record({
+      userId: user.id,
+      action: AuditActions.NOTIFICATION_BROADCAST,
+      resource: "notification",
+      metadata: { title: dto.title, reach },
+      ip,
+    });
+    return { reach };
   }
 
   @Get("audit-log")
