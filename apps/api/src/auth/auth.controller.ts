@@ -27,7 +27,7 @@ export class AuthController {
 
   @Public()
   @Post("register")
-  @Throttle({ auth: { limit: 5, ttl: 60_000 } })
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @ApiOperation({
     summary: "Create a parent account",
     description:
@@ -48,7 +48,7 @@ export class AuthController {
   @Public()
   @Post("login")
   @HttpCode(HttpStatus.OK)
-  @Throttle({ auth: { limit: 10, ttl: 60_000 } })
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @ApiOperation({ summary: "Sign in with email and password" })
   @ApiEnvelopeResponse(SessionResponseDto, "Session created")
   @ApiUnauthorizedResponse({ description: "INVALID_CREDENTIALS" })
@@ -66,7 +66,7 @@ export class AuthController {
   @Public()
   @Post("refresh")
   @HttpCode(HttpStatus.OK)
-  @Throttle({ auth: { limit: 60, ttl: 60_000 } })
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @ApiOperation({
     summary: "Exchange the refresh cookie for a new access token",
     description:
@@ -120,7 +120,7 @@ export class AuthController {
   @Public()
   @Post("forgot-password")
   @HttpCode(HttpStatus.OK)
-  @Throttle({ auth: { limit: 5, ttl: 300_000 } })
+  @Throttle({ default: { limit: 5, ttl: 300_000 } })
   @ApiOperation({
     summary: "Request a password reset link",
     description:
@@ -135,7 +135,7 @@ export class AuthController {
   @Public()
   @Post("reset-password")
   @HttpCode(HttpStatus.NO_CONTENT)
-  @Throttle({ auth: { limit: 10, ttl: 300_000 } })
+  @Throttle({ default: { limit: 10, ttl: 300_000 } })
   @ApiOperation({ summary: "Set a new password using a reset token" })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     await this.auth.resetPassword(dto.token, dto.password);

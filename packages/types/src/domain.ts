@@ -43,8 +43,11 @@ export function ageCategoryForDateOfBirth(dateOfBirth: Date | string, reference?
 }
 
 /**
- * Bands a child may see. A child is shown their own band plus the one below, so
- * the library never looks empty and revision stays available.
+ * Bands a child may reach: their own and every easier one.
+ *
+ * Content is gated upwards, never downwards — a five-year-old revisiting the
+ * colours game is fine, a two-year-old being shown the alphabet is not. This
+ * also means a child's library never looks empty.
  */
 export function accessibleAgeCategories(category: AgeCategory): AgeCategory[] {
   switch (category) {
@@ -53,7 +56,7 @@ export function accessibleAgeCategories(category: AgeCategory): AgeCategory[] {
     case AgeCategory.AGE_3_4:
       return [AgeCategory.AGE_1_2, AgeCategory.AGE_3_4];
     default:
-      return [AgeCategory.AGE_3_4, AgeCategory.AGE_5_7];
+      return [AgeCategory.AGE_1_2, AgeCategory.AGE_3_4, AgeCategory.AGE_5_7];
   }
 }
 

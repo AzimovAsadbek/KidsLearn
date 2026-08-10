@@ -21,6 +21,12 @@ import { MediaModule } from "./media/media.module";
 import { ProgressModule } from "./progress/progress.module";
 import { FeatureFlagsModule } from "./feature-flags/feature-flags.module";
 import { AuditModule } from "./audit/audit.module";
+import { StatisticsModule } from "./statistics/statistics.module";
+import { LeaderboardModule } from "./leaderboard/leaderboard.module";
+import { NotificationsModule } from "./notifications/notifications.module";
+import { AiModule } from "./ai/ai.module";
+import { CertificatesModule } from "./certificates/certificates.module";
+import { AdminModule } from "./admin/admin.module";
 import { QueueModule } from "./queue/queue.module";
 
 @Module({
@@ -74,12 +80,12 @@ import { QueueModule } from "./queue/queue.module";
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const throttle = config.getOrThrow<Configuration["throttle"]>("throttle");
+        // Exactly one throttler is registered. Every throttler in this array
+        // applies to every route, so adding a second strict "auth" bucket here
+        // would silently cap the whole API at the auth limit. Auth endpoints
+        // tighten their own limit with @Throttle({ default: … }) instead.
         return {
-          throttlers: [
-            { name: "default", ttl: throttle.ttl * 1000, limit: throttle.limit },
-            // Named bucket the auth endpoints opt into with @Throttle.
-            { name: "auth", ttl: 60_000, limit: throttle.authLimit },
-          ],
+          throttlers: [{ name: "default", ttl: throttle.ttl * 1000, limit: throttle.limit }],
         };
       },
     }),
@@ -97,6 +103,12 @@ import { QueueModule } from "./queue/queue.module";
     GamesModule,
     MediaModule,
     ProgressModule,
+    StatisticsModule,
+    LeaderboardModule,
+    NotificationsModule,
+    AiModule,
+    CertificatesModule,
+    AdminModule,
     HealthModule,
   ],
   providers: [

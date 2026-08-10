@@ -127,6 +127,13 @@ export const RecommendationSource = {
 } as const;
 export type RecommendationSource = (typeof RecommendationSource)[keyof typeof RecommendationSource];
 
+export const CertificateStatus = {
+  PENDING: "PENDING",
+  READY: "READY",
+  FAILED: "FAILED",
+} as const;
+export type CertificateStatus = (typeof CertificateStatus)[keyof typeof CertificateStatus];
+
 export const LeaderboardPeriod = {
   WEEKLY: "WEEKLY",
   MONTHLY: "MONTHLY",
