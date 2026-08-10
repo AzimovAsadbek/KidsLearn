@@ -193,7 +193,7 @@ export function KidGamesView() {
 
 export function KidBooksView() {
   const t = useT();
-  const { plural } = useI18n();
+  const { locale, plural } = useI18n();
   return (
     <div>
       <KidPageHeader glyph="📖" title={t("nav.books")} subtitle={t("kid.booksSubtitle")} />
@@ -211,7 +211,7 @@ export function KidBooksView() {
               </span>
             </div>
             <div className="flex flex-1 flex-col p-4">
-              <h2 className="font-display text-base font-extrabold leading-tight text-content">{book.title}</h2>
+              <h2 className="font-display text-base font-extrabold leading-tight text-content">{book.title[locale]}</h2>
               <p className="t-caption mt-1 font-semibold text-content-secondary">
                 {plural("plural.pages", book.pages)} · {plural("plural.minutes", book.minutes)}
               </p>
@@ -232,7 +232,7 @@ export function KidBooksView() {
 
 export function KidVideosView() {
   const t = useT();
-  const { plural, intlLocale } = useI18n();
+  const { locale, plural, intlLocale } = useI18n();
   return (
     <div>
       <KidPageHeader glyph="🎬" title={t("nav.videos")} subtitle={t("kid.videosSubtitle")} />
@@ -256,7 +256,7 @@ export function KidVideosView() {
               </span>
             </div>
             <div className="p-4">
-              <h2 className="font-display text-base font-extrabold text-content">{video.title}</h2>
+              <h2 className="font-display text-base font-extrabold text-content">{video.title[locale]}</h2>
               <p className="t-caption mt-0.5 font-semibold text-content-secondary">
                 {plural("plural.plays", video.views, { count: video.views.toLocaleString(intlLocale) })}
               </p>
@@ -278,7 +278,7 @@ const ACTIVITY_LABEL_KEY = {
 
 export function KidActivitiesView() {
   const t = useT();
-  const { plural } = useI18n();
+  const { locale, plural } = useI18n();
   return (
     <div>
       <KidPageHeader glyph="🎨" title={t("nav.activities")} subtitle={t("kid.activitiesSubtitle")} />
@@ -295,7 +295,7 @@ export function KidActivitiesView() {
               {activity.glyph}
             </span>
             <div className="min-w-0 flex-1">
-              <h2 className="font-display text-base font-extrabold leading-tight text-content">{activity.title}</h2>
+              <h2 className="font-display text-base font-extrabold leading-tight text-content">{activity.title[locale]}</h2>
               <p className="t-caption mt-0.5 font-bold text-content-secondary">
                 {t(ACTIVITY_LABEL_KEY[activity.kind])} · {plural("plural.minutes", activity.minutes)} ·{" "}
                 {t("kid.ageBand", { band: activity.ageBand })}

@@ -12,6 +12,9 @@ export default defineConfig({
     include: ["test/**/*.spec.ts"],
     root: "./",
     fileParallelism: false,
+    // BullMQ workers hold native Redis connections that crash vitest's default
+    // worker_threads pool; child processes shut them down cleanly.
+    pool: "forks",
     testTimeout: 30_000,
     hookTimeout: 60_000,
   },

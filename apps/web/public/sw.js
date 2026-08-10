@@ -71,3 +71,51 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+/* --- Web push ------------------------------------------------------------ */
+
+/**
+ * The server sends `{title, body, href}` (see NotificationsService.sendPush).
+ * The payload is displayed as-is — copy is authored server-side in the
+ * account's locale, the worker adds no text of its own.
+ */
+self.addEventListener("push", (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { body: event.data ? event.data.text() : "" };
+  }
+
+  const title = payload.title || "KidsLearn";
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: payload.body || "",
+      icon: "/icon.svg",
+      badge: "/icon.svg",
+      data: { href: payload.href || "/notifications" },
+      tag: payload.tag || undefined,
+    }),
+  );
+});
+
+/** Focus an open KidsLearn tab on the target page, or open a new one. */
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const href = (event.notification.data && event.notification.data.href) || "/notifications";
+  const target = new URL(href, self.location.origin).href;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url === target && "focus" in client) return client.focus();
+      }
+      for (const client of clientList) {
+        if ("navigate" in client && "focus" in client) {
+          return client.navigate(target).then((navigated) => navigated && navigated.focus());
+        }
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
+});
