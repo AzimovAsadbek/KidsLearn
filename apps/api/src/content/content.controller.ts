@@ -22,6 +22,7 @@ import {
   CategoryQueryDto,
   CategoryResponse,
   ChangeStatusDto,
+  CompleteLessonDto,
   LessonQueryDto,
   LessonResponse,
   SubjectResponse,
@@ -191,6 +192,20 @@ export class LessonsController {
     @Body() dto: SaveLessonProgressDto,
   ) {
     await this.lessons.saveProgress(user, id, dto.childId, dto.percent);
+  }
+
+  @Post(":id/complete")
+  @ApiOperation({
+    summary: "Complete a lesson",
+    description:
+      "Grades any answers server-side, awards XP and stars, updates progress and evaluates achievements. Idempotent on `clientAttemptId`.",
+  })
+  async complete(
+    @CurrentUser() user: RequestUser,
+    @Param("id") id: string,
+    @Body() dto: CompleteLessonDto,
+  ) {
+    return this.lessons.complete(user, id, dto);
   }
 
   @Roles("ADMIN")

@@ -1,31 +1,31 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { BarChart3, Pencil, Plus, UserRound } from "lucide-react";
-import { calculateAge, cn, formatDuration, formatRelativeTime } from "@/lib/utils";
-import { toneStyles } from "@/lib/tone";
+import { cn, formatDuration, formatRelativeTime } from "@/lib/utils";
+import { toneStyles, type Tone } from "@/lib/tone";
 import { useI18n, useT } from "@/i18n/provider";
-import type { Child } from "@/types";
-import { children as seedChildren, NOW } from "@/data/children";
-import { getSubject } from "@/data/subjects";
+import type { ChildDto } from "@kidslearn/types";
 import { PageHeading } from "@/components/layout/app-shell";
 import { Card, CardBody } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ProgressBar } from "@/components/ui/progress";
-import { EmptyState } from "@/components/ui/states";
+import { EmptyState, SkeletonCard } from "@/components/ui/states";
+import { fetchChildren, queryKeys } from "@/lib/api/queries";
 import { AddChildModal } from "./add-child-modal";
 
 export function ChildrenView() {
   const t = useT();
   const params = useSearchParams();
   const [addOpen, setAddOpen] = useState(params.get("add") === "1");
-  const [added, setAdded] = useState<Child[]>([]);
 
-  const all = [...seedChildren, ...added];
+  const { data, isLoading } = useQuery({ queryKey: queryKeys.children, queryFn: fetchChildren });
+  const all = data ?? [];
 
   return (
     <div className="mx-auto w-full max-w-[90rem]">
@@ -39,7 +39,13 @@ export function ChildrenView() {
         }
       />
 
-      {all.length === 0 ? (
+      {isLoading ? (
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <SkeletonCard key={i} className="h-72" />
+          ))}
+        </div>
+      ) : all.length === 0 ? (
         <EmptyState
           glyph="👶"
           title="No children yet"
@@ -68,39 +74,38 @@ export function ChildrenView() {
         </div>
       )}
 
-      <AddChildModal
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        onCreate={(child) => setAdded((current) => [...current, child])}
-      />
+      <AddChildModal open={addOpen} onClose={() => setAddOpen(false)} />
     </div>
   );
 }
 
-export function ChildCard({ child }: { child: Child }) {
+export function ChildCard({ child }: { child: ChildDto }) {
   const t = useT();
   const { intlLocale } = useI18n();
-  const subject = getSubject(child.favouriteSubjectId);
-  const levelPercent = Math.round((child.xp / child.xpToNextLevel) * 100);
+  const progress = child.progress;
+  const tone = child.avatarTone as Tone;
+  const levelPercent = progress
+    ? Math.round((progress.xpIntoLevel / Math.max(1, progress.xpForNextLevel)) * 100)
+    : 0;
 
   return (
     <Card className="group flex flex-col overflow-hidden" interactive>
       {/* Tinted hero keyed to the child's own avatar tone */}
-      <div className={cn("relative h-24", toneStyles[child.avatar.tone].gradient)}>
+      <div className={cn("relative h-24", toneStyles[tone]?.gradient ?? toneStyles.brand.gradient)}>
         <div
           className="absolute inset-0 opacity-30"
           aria-hidden
           style={{ backgroundImage: "radial-gradient(circle at 80% 20%, rgba(255,255,255,0.6), transparent 55%)" }}
         />
         <div className="absolute -bottom-7 left-5">
-          <Avatar spec={child.avatar} size="xl" className="ring-4 ring-surface" />
+          <Avatar spec={{ glyph: child.avatarGlyph, tone }} size="xl" className="ring-4 ring-surface" />
         </div>
         <div className="absolute right-4 top-4 flex gap-1.5">
           <Badge tone="sun" size="sm">
-            🔥 {child.streakDays}
+            🔥 {progress?.currentStreak ?? 0}
           </Badge>
           <Badge tone="brand" size="sm">
-            Lv {child.level}
+            Lv {progress?.level ?? 1}
           </Badge>
         </div>
       </div>
@@ -110,34 +115,35 @@ export function ChildCard({ child }: { child: Child }) {
           <div className="min-w-0">
             <h3 className="t-h3 truncate text-content">{child.name}</h3>
             <p className="t-caption text-content-secondary">
-              {calculateAge(child.birthDate, NOW)} years · {t("parent.lastActive", {
-                time: formatRelativeTime(child.lastActiveAt, NOW, intlLocale),
-              })}
+              {child.age} years ·{" "}
+              {progress?.lastActivityAt
+                ? t("parent.lastActive", { time: formatRelativeTime(progress.lastActivityAt, new Date(), intlLocale) })
+                : "No activity yet"}
             </p>
           </div>
           <span
-            className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-sm text-lg", toneStyles[subject.tone].soft)}
-            title={`Favourite subject: ${subject.name}`}
+            className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-sm text-lg", toneStyles[tone]?.soft ?? toneStyles.brand.soft)}
+            title={`Ages ${child.ageCategory.replace("AGE_", "").replace("_", "–")}`}
             aria-hidden
           >
-            {subject.glyph}
+            {child.avatarGlyph}
           </span>
         </div>
 
         <div className="mt-4">
           <ProgressBar
             value={levelPercent}
-            tone={child.avatar.tone}
-            label={`Level ${child.level} → ${child.level + 1}`}
+            tone={tone}
+            label={`Level ${progress?.level ?? 1} → ${(progress?.level ?? 1) + 1}`}
             showValue
           />
         </div>
 
         <dl className="mt-4 grid grid-cols-3 gap-2 rounded-lg bg-surface-muted p-3">
           {[
-            { label: t("common.stars"), value: child.stars, glyph: "⭐" },
-            { label: t("nav.lessons"), value: child.lessonsCompleted, glyph: "📗" },
-            { label: "Time", value: formatDuration(child.minutesLearned), glyph: "⏱️" },
+            { label: t("common.stars"), value: progress?.stars ?? 0, glyph: "⭐" },
+            { label: t("nav.lessons"), value: progress?.lessonsCompleted ?? 0, glyph: "📗" },
+            { label: "Time", value: formatDuration(Math.round((progress?.learningSeconds ?? 0) / 60)), glyph: "⏱️" },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <dt className="t-caption text-content-secondary">

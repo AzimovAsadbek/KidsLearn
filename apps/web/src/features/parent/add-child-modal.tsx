@@ -1,18 +1,21 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
-import { calculateAge, cn } from "@/lib/utils";
-import { toneStyles } from "@/lib/tone";
+import { cn } from "@/lib/utils";
+import { toneStyles, type Tone } from "@/lib/tone";
 import { useT } from "@/i18n/provider";
-import type { AvatarSpec, Child } from "@/types";
-import { avatarChoices, NOW } from "@/data/children";
-import { subjects } from "@/data/subjects";
+import type { AvatarSpec } from "@/types";
+import { avatarChoices } from "@/data/children";
+import { createChild, fetchSubjects, queryKeys } from "@/lib/api/queries";
+import { ApiError } from "@/lib/api/client";
 import { Modal } from "@/components/ui/overlay";
 import { Button } from "@/components/ui/button";
 import { DatePicker, Field, Input } from "@/components/ui/field";
 import { StepDots } from "@/components/ui/progress";
 import { useAppStore } from "@/store/app-store";
+import { calculateAge as deriveAge } from "@kidslearn/types";
 
 const STEPS = ["Who are they?", "Pick an avatar", "First subject"] as const;
 
@@ -20,34 +23,29 @@ const STEPS = ["Who are they?", "Pick an avatar", "First subject"] as const;
  * Three short steps rather than one long form — a young family is usually
  * filling this in one-handed, and age is derived rather than asked twice.
  */
-export function AddChildModal({
-  open,
-  onClose,
-  onCreate,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onCreate: (child: Child) => void;
-}) {
+export function AddChildModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useT();
   const pushToast = useAppStore((s) => s.pushToast);
+  const queryClient = useQueryClient();
+
+  const { data: subjectList } = useQuery({ queryKey: queryKeys.subjects, queryFn: () => fetchSubjects() });
+  const subjects = subjectList ?? [];
 
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [avatar, setAvatar] = useState<AvatarSpec>(avatarChoices[0]);
-  const [subjectId, setSubjectId] = useState(subjects[0].id);
+  const [subjectId, setSubjectId] = useState<string>("");
   const [errors, setErrors] = useState<{ name?: string; birthDate?: string }>({});
-  const [saving, setSaving] = useState(false);
 
-  const age = useMemo(() => (birthDate ? calculateAge(birthDate, NOW) : null), [birthDate]);
+  const age = useMemo(() => (birthDate ? deriveAge(birthDate) : null), [birthDate]);
 
   function reset() {
     setStep(0);
     setName("");
     setBirthDate("");
     setAvatar(avatarChoices[0]);
-    setSubjectId(subjects[0].id);
+    setSubjectId("");
     setErrors({});
   }
 
@@ -55,13 +53,41 @@ export function AddChildModal({
     const next: typeof errors = {};
     if (name.trim().length < 2) next.name = "Please enter your child's name.";
     if (!birthDate) next.birthDate = "A date of birth lets us match lessons to their age.";
-    else if (new Date(birthDate) > NOW) next.birthDate = "That date is in the future.";
-    else if (calculateAge(birthDate, NOW) > 12) next.birthDate = "KidsLearn is designed for ages 1–7.";
+    else if (new Date(birthDate) > new Date()) next.birthDate = "That date is in the future.";
+    else if (deriveAge(birthDate) > 12) next.birthDate = "KidsLearn is designed for ages 1–7.";
     setErrors(next);
     return Object.keys(next).length === 0;
   }
 
-  async function onSubmit(event: FormEvent) {
+  const create = useMutation({
+    mutationFn: createChild,
+    onSuccess: async (child) => {
+      // The switcher, the dashboard and every child-scoped query read from here.
+      await queryClient.invalidateQueries({ queryKey: queryKeys.children });
+      pushToast({
+        title: `${child.name} is ready to learn`,
+        description: "We've matched the starter path to their age.",
+        tone: "mint",
+        glyph: "🎉",
+      });
+      reset();
+      onClose();
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.details) {
+        setErrors({ name: error.details.name?.[0], birthDate: error.details.dateOfBirth?.[0] });
+        setStep(0);
+        return;
+      }
+      pushToast({
+        title: error instanceof ApiError ? error.message : "We couldn't add that child.",
+        tone: "coral",
+        glyph: "⚠️",
+      });
+    },
+  });
+
+  function onSubmit(event: FormEvent) {
     event.preventDefault();
     if (step === 0 && !validateStepOne()) return;
     if (step < STEPS.length - 1) {
@@ -69,42 +95,14 @@ export function AddChildModal({
       return;
     }
 
-    setSaving(true);
-    await new Promise((resolve) => setTimeout(resolve, 600));
-
-    onCreate({
-      id: `ch-${name.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`,
-      parentId: "par-1",
+    create.mutate({
       name: name.trim(),
-      birthDate,
-      avatar,
-      level: 1,
-      xp: 0,
-      xpToNextLevel: 200,
-      stars: 0,
-      streakDays: 0,
-      bestStreak: 0,
-      lessonsCompleted: 0,
-      gamesPlayed: 0,
-      minutesLearned: 0,
-      accuracy: 0,
-      lastActiveAt: NOW.toISOString(),
-      joinedAt: NOW.toISOString(),
-      favouriteSubjectId: subjectId,
+      dateOfBirth: birthDate,
+      avatarGlyph: avatar.glyph,
+      avatarTone: avatar.tone,
       dailyGoalLessons: 4,
-      dailyGoalCompleted: 0,
+      ...(subjectId ? { favouriteSubjectId: subjectId } : {}),
     });
-
-    pushToast({
-      title: `${name.trim()} is ready to learn`,
-      description: "We've picked a starter path for their age.",
-      tone: "mint",
-      glyph: "🎉",
-    });
-
-    setSaving(false);
-    reset();
-    onClose();
   }
 
   return (
@@ -126,7 +124,7 @@ export function AddChildModal({
                 {t("common.back")}
               </Button>
             ) : null}
-            <Button type="submit" form="add-child-form" loading={saving}>
+            <Button type="submit" form="add-child-form" loading={create.isPending}>
               {step === STEPS.length - 1 ? t("common.create") : t("common.next")}
             </Button>
           </div>
@@ -166,7 +164,7 @@ export function AddChildModal({
                   aria-describedby={describedBy}
                   invalid={invalid}
                   value={birthDate}
-                  max={NOW.toISOString().slice(0, 10)}
+                  max={new Date().toISOString().slice(0, 10)}
                   onChange={(e) => setBirthDate(e.target.value)}
                 />
               )}
@@ -236,7 +234,7 @@ export function AddChildModal({
                     )}
                   >
                     <span
-                      className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-sm text-xl", toneStyles[subject.tone].soft)}
+                      className={cn("grid h-10 w-10 shrink-0 place-items-center rounded-sm text-xl", toneStyles[subject.tone as Tone].soft)}
                       aria-hidden
                     >
                       {subject.glyph}

@@ -1,9 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import {
+  ActivityType,
   ErrorCode,
   accessibleAgeCategories,
   ageCategoryForDateOfBirth,
+  starsForAccuracy,
   type LessonBlockDto,
+  type LessonCompletionResultDto,
   type LessonDto,
   type Locale,
 } from "@kidslearn/types";
@@ -14,8 +17,9 @@ import { AppException } from "../common/errors/app-exception";
 import { pickTranslation, toPrismaLocale } from "../common/utils/locale";
 import { StorageService } from "../media/storage.service";
 import { ChildAccessService } from "../children/child-access.service";
+import { ProgressService } from "../progress/progress.service";
 import type { RequestUser } from "../common/decorators";
-import type { ChangeStatusDto, LessonQueryDto, UpsertLessonDto } from "./dto/content.dto";
+import type { ChangeStatusDto, CompleteLessonDto, LessonQueryDto, UpsertLessonDto } from "./dto/content.dto";
 import { slugify } from "../common/utils/slug";
 
 const lessonInclude = {
@@ -35,6 +39,7 @@ export class LessonsService {
     private readonly cache: CacheService,
     private readonly storage: StorageService,
     private readonly childAccess: ChildAccessService,
+    private readonly progress: ProgressService,
   ) {}
 
   /**
@@ -246,6 +251,97 @@ export class LessonsService {
       create: { childId, lessonId, percent: clamped },
       update: { percent: { set: clamped } },
     });
+  }
+
+  /**
+   * Completes a lesson.
+   *
+   * Answers are graded here rather than trusted, and the whole thing is
+   * idempotent on `clientAttemptId`: a double-tap on "finish", a retry, or an
+   * offline replay all resolve to the first completion without awarding XP a
+   * second time.
+   */
+  async complete(
+    user: RequestUser,
+    lessonId: string,
+    dto: CompleteLessonDto,
+  ): Promise<LessonCompletionResultDto> {
+    await this.childAccess.assertAccess(user, dto.childId);
+
+    const lesson = await this.prisma.lesson.findFirst({
+      where: { id: lessonId, deletedAt: null, status: "PUBLISHED" },
+      include: {
+        blocks: { include: { question: { include: { options: true } } } },
+        translations: true,
+      },
+    });
+    if (!lesson) throw AppException.notFound("We couldn't find that lesson.", ErrorCode.LESSON_NOT_FOUND);
+
+    const existing = await this.prisma.lessonProgress.findUnique({
+      where: { childId_lessonId: { childId: dto.childId, lessonId } },
+    });
+
+    // Already finished: report the original outcome and award nothing further.
+    if (existing?.completedAt) {
+      return {
+        lessonId,
+        xpAwarded: 0,
+        starsAwarded: 0,
+        unlockedAchievements: [],
+        progress: await this.progress.forChild(dto.childId),
+      };
+    }
+
+    // Grade against the lesson's own answer key.
+    const options = lesson.blocks.flatMap((block) => block.question?.options ?? []);
+    const correctById = new Map(options.map((option) => [option.id, option.isCorrect]));
+    const questionCount = lesson.blocks.filter((block) => block.question).length;
+
+    const submitted = dto.answers ?? [];
+    const correct = submitted.filter((answer) => correctById.get(answer.selectedOptionId) === true).length;
+    const answered = Math.max(questionCount, submitted.length);
+
+    const stars = answered > 0 ? starsForAccuracy(correct, answered) : lesson.starReward;
+    const durationSeconds = Math.max(1, Math.min(dto.durationSeconds, 3600));
+
+    await this.prisma.$transaction([
+      this.prisma.lessonProgress.upsert({
+        where: { childId_lessonId: { childId: dto.childId, lessonId } },
+        create: { childId: dto.childId, lessonId, percent: 100, starsEarned: stars, completedAt: new Date() },
+        update: { percent: 100, starsEarned: stars, completedAt: new Date() },
+      }),
+      this.prisma.lesson.update({ where: { id: lessonId }, data: { completions: { increment: 1 } } }),
+    ]);
+
+    const title = pickTranslation(lesson.translations, toPrismaLocale(user.locale))?.title ?? lesson.slug;
+    const applied = await this.progress.apply({
+      childId: dto.childId,
+      subjectId: lesson.subjectId,
+      xp: lesson.xpReward,
+      stars,
+      durationSeconds,
+      questionsAnswered: answered,
+      correctAnswers: correct,
+      lessonCompleted: true,
+      activity: {
+        type: ActivityType.LESSON_COMPLETED,
+        title: `Completed "${title}"`,
+        detail: answered > 0 ? `${correct} of ${answered} correct` : "Lesson finished",
+        glyph: lesson.glyph,
+        tone: lesson.tone,
+        refId: lesson.id,
+      },
+    });
+
+    await this.invalidate();
+
+    return {
+      lessonId,
+      xpAwarded: lesson.xpReward,
+      starsAwarded: stars,
+      unlockedAchievements: applied.unlockedAchievements,
+      progress: applied.progress,
+    };
   }
 
   async invalidate(): Promise<void> {

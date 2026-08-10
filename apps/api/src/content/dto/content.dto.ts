@@ -215,6 +215,41 @@ export class UpsertLessonDto {
   translations!: TranslationDto[];
 }
 
+export class LessonAnswerDto {
+  @ApiProperty({ format: "uuid" })
+  @IsUUID()
+  questionId!: string;
+
+  @ApiProperty({ format: "uuid" })
+  @IsUUID()
+  selectedOptionId!: string;
+}
+
+export class CompleteLessonDto {
+  @ApiProperty({ description: "Idempotency key; a replay never awards XP twice", maxLength: 64 })
+  @IsString()
+  @MaxLength(64)
+  clientAttemptId!: string;
+
+  @ApiProperty({ format: "uuid" })
+  @IsUUID()
+  childId!: string;
+
+  @ApiProperty({ minimum: 1, maximum: 3600 })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(3600)
+  durationSeconds!: number;
+
+  @ApiPropertyOptional({ type: [LessonAnswerDto], description: "Graded server-side" })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => LessonAnswerDto)
+  answers?: LessonAnswerDto[];
+}
+
 export class ChangeStatusDto {
   @ApiProperty({ enum: ContentStatus })
   @IsEnum(ContentStatus)
