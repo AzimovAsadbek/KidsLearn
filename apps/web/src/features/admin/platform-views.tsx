@@ -34,7 +34,7 @@ function toneOf(tone: string): Tone {
 
 export function AdminAnalyticsView() {
   const t = useT();
-  const { intlLocale } = useI18n();
+  const { locale, intlLocale } = useI18n();
 
   const analytics = useQuery({ queryKey: queryKeys.adminAnalytics, queryFn: fetchAdminAnalytics });
   const data = analytics.data;
@@ -51,7 +51,7 @@ export function AdminAnalyticsView() {
           label: t("admin.avgSession"),
           glyph: "⏱️",
           tone: "lagoon",
-          value: formatDuration(Math.round(data.averageSessionSeconds / 60)),
+          value: formatDuration(Math.round(data.averageSessionSeconds / 60), locale),
         },
       ] as const)
     : [];

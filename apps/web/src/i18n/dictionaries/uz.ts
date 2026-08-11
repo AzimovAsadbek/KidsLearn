@@ -779,4 +779,6 @@ export const uz: LocaleDictionary = {
   "analytics.streakCalendarSubtitle": "Har bir katak — bir kunlik o'qish",
   "analytics.noChildTitle": "Bola tanlanmagan",
   "analytics.noChildBody": "Progressni kuzatish uchun bola qo'shing.",
+  "parent.inTotal": "jami {duration}",
+  "parent.todayCount": "bugun {count}",
 };

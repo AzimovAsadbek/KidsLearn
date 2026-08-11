@@ -811,4 +811,6 @@ export const ru: LocaleDictionary = {
   "analytics.streakCalendarSubtitle": "Каждый квадрат — один день учёбы",
   "analytics.noChildTitle": "Ребёнок не выбран",
   "analytics.noChildBody": "Добавьте ребёнка, чтобы следить за прогрессом.",
+  "parent.inTotal": "{duration} всего",
+  "parent.todayCount": "{count} сегодня",
 };

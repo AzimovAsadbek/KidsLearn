@@ -16,14 +16,21 @@ export function formatCompact(value: number, locale = "en-US"): string {
   return new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(value);
 }
 
-/** Minutes → "1h 24m" / "45m". */
-export function formatDuration(minutes: number): string {
+/** Minutes → "1h 24m" / "45m", with per-locale unit letters. */
+const DURATION_UNITS: Record<string, [hour: string, minute: string]> = {
+  en: ["h", "m"],
+  uz: ["s", "daq"],
+  ru: ["ч", "м"],
+};
+
+export function formatDuration(minutes: number, locale = "en"): string {
+  const [hu, mu] = DURATION_UNITS[locale.slice(0, 2)] ?? DURATION_UNITS.en;
   const safe = Math.max(0, Math.round(minutes));
   const h = Math.floor(safe / 60);
   const m = safe % 60;
-  if (h === 0) return `${m}m`;
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}m`;
+  if (h === 0) return `${m}${mu}`;
+  if (m === 0) return `${h}${hu}`;
+  return `${h}${hu} ${m}${mu}`;
 }
 
 /** Whole years between a birth date and today. */

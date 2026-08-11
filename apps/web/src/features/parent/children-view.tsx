@@ -81,7 +81,7 @@ export function ChildrenView() {
 
 export function ChildCard({ child }: { child: ChildDto }) {
   const t = useT();
-  const { intlLocale } = useI18n();
+  const { locale, intlLocale } = useI18n();
   const progress = child.progress;
   const tone = child.avatarTone as Tone;
   const levelPercent = progress
@@ -143,7 +143,7 @@ export function ChildCard({ child }: { child: ChildDto }) {
           {[
             { label: t("common.stars"), value: progress?.stars ?? 0, glyph: "⭐" },
             { label: t("nav.lessons"), value: progress?.lessonsCompleted ?? 0, glyph: "📗" },
-            { label: t("common.time"), value: formatDuration(Math.round((progress?.learningSeconds ?? 0) / 60)), glyph: "⏱️" },
+            { label: t("common.time"), value: formatDuration(Math.round((progress?.learningSeconds ?? 0) / 60), locale), glyph: "⏱️" },
           ].map((stat) => (
             <div key={stat.label} className="text-center">
               <dt className="t-caption text-content-secondary">

@@ -798,6 +798,8 @@ export const en = {
   "analytics.streakCalendarSubtitle": "Every square is one day of learning",
   "analytics.noChildTitle": "No child selected",
   "analytics.noChildBody": "Add a child to start tracking progress.",
+  "parent.inTotal": "{duration} in total",
+  "parent.todayCount": "{count} today",
 } as const;
 
 export type TranslationKey = keyof typeof en;

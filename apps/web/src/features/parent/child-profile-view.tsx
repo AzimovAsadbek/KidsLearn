@@ -36,7 +36,7 @@ type TabId = "overview" | "progress" | "achievements" | "activity" | "statistics
 /** Everything on this page is fetched per child; nothing is derived locally. */
 export function ChildProfileView({ child }: { child: ChildDto }) {
   const t = useT();
-  const { intlLocale } = useI18n();
+  const { locale, intlLocale } = useI18n();
   const [tab, setTab] = useState<TabId>("overview");
 
   const statistics = useQuery({
@@ -169,7 +169,7 @@ export function ChildProfileView({ child }: { child: ChildDto }) {
                       {
                         glyph: "⏱️",
                         label: "Time spent",
-                        value: formatDuration(Math.round((progress?.learningSeconds ?? 0) / 60)),
+                        value: formatDuration(Math.round((progress?.learningSeconds ?? 0) / 60), locale),
                       },
                     ].map((row) => (
                       <div

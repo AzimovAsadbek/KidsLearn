@@ -111,18 +111,21 @@ test.describe("child", () => {
     await page.getByRole("button", { name: /Play/ }).first().click();
 
     // Answer every round correctly: the prompt names the colour, so the test
-    // exercises real server grading deterministically. The result screen is
-    // detected by its stats grid, not by "Play again" (the in-game replay
-    // control shares that label).
+    // exercises real server grading deterministically. Advancement is detected
+    // by the round counter (colours can repeat, so the heading text may not
+    // change), and the finish by the result screen's stats grid — never by
+    // "Play again", which the in-game replay control shares.
     for (let round = 1; round <= 6; round += 1) {
+      await expect(page.getByText(`${round}/6`)).toBeVisible({ timeout: 15_000 });
       const heading = page.getByRole("heading", { level: 1, name: /find the/i });
       await expect(heading).toBeVisible({ timeout: 15_000 });
       const prompt = await heading.innerText();
       const colour = prompt.match(/find the (\w+)/i)?.[1] ?? "";
       const label = colour.charAt(0).toUpperCase() + colour.slice(1);
       await page.getByRole("button", { name: label, exact: true }).click();
-      await page.waitForTimeout(1300);
-      if ((await page.getByText(/Accuracy/).count()) > 0) break;
+      if (round < 6) {
+        await expect(page.getByText(`${round + 1}/6`)).toBeVisible({ timeout: 15_000 });
+      }
     }
 
     await expect(page.getByText(/Accuracy/)).toBeVisible({ timeout: 20_000 });

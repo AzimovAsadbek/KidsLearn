@@ -42,6 +42,7 @@ export function ParentGreeting({ name, hour }: { name: string; hour: number }) {
 /** Every figure here comes from the API's materialised progress aggregate. */
 export function ParentStatRow({ progress, childName }: { progress: ChildProgressDto; childName: string }) {
   const t = useT();
+  const { locale } = useI18n();
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -51,21 +52,21 @@ export function ParentStatRow({ progress, childName }: { progress: ChildProgress
         label={t("parent.todaysActivity")}
         value={Math.round(progress.todaySeconds / 60)}
         unit={t("common.minutes")}
-        footnote={`${childName} · ${formatDuration(Math.round(progress.learningSeconds / 60))} in total`}
+        footnote={`${childName} · ${t("parent.inTotal", { duration: formatDuration(Math.round(progress.learningSeconds / 60), locale) })}`}
       />
       <StatCard
         tone="mint"
         glyph="📗"
         label={t("parent.lessonsCompleted")}
         value={progress.lessonsCompleted}
-        footnote={`${progress.todayLessons} today`}
+        footnote={t("parent.todayCount", { count: progress.todayLessons })}
       />
       <StatCard
         tone="sun"
         glyph="⭐"
         label={t("parent.starsEarned")}
         value={progress.stars}
-        footnote={`${progress.todayStars} today`}
+        footnote={t("parent.todayCount", { count: progress.todayStars })}
       />
       <StatCard
         tone="coral"
@@ -163,6 +164,7 @@ export function AiRecommendationCard({
   loading?: boolean;
 }) {
   const t = useT();
+  const { locale } = useI18n();
 
   if (loading) return <SkeletonCard className="h-64" />;
 
@@ -223,7 +225,7 @@ export function AiRecommendationCard({
                 {t("parent.startNow")}
               </ButtonLink>
               <span className="t-caption font-semibold text-content-secondary">
-                ~{formatDuration(recommendation.minutes)}
+                ~{formatDuration(recommendation.minutes, locale)}
                 {recommendation.subjectName ? ` · ${recommendation.subjectName}` : ""}
               </span>
             </div>

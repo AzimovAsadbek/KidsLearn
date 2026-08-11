@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn, formatDuration } from "@/lib/utils";
 import { toneStyles, type Tone } from "@/lib/tone";
-import { useT } from "@/i18n/provider";
+import { useI18n, useT } from "@/i18n/provider";
 import type { MedalTier } from "@kidslearn/types";
 import { useChildContext } from "@/components/providers/child-provider";
 import { useAppStore } from "@/store/app-store";
@@ -46,6 +46,7 @@ function KidStat({ glyph, value, label, tone }: { glyph: string; value: string |
 
 export function KidProfileView() {
   const t = useT();
+  const { locale } = useI18n();
   const { selectedChild, loading } = useChildContext();
   const childId = selectedChild?.id;
 
@@ -115,7 +116,7 @@ export function KidProfileView() {
         <KidStat glyph="📗" value={progress?.lessonsCompleted ?? 0} label={t("nav.lessons")} tone="mint" />
         <KidStat
           glyph="⏱️"
-          value={formatDuration(Math.round((progress?.learningSeconds ?? 0) / 60))}
+          value={formatDuration(Math.round((progress?.learningSeconds ?? 0) / 60), locale)}
           label={t("common.time")}
           tone="sky"
         />

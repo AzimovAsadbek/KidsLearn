@@ -98,16 +98,18 @@ services:
     networks: [kidslearn]
 
   # Applies pending migrations once, then exits. Never runs automatically from
-  # the API process, so a rolling deploy cannot race itself.
+  # the API process, so a rolling deploy cannot race itself. Uses the build
+  # stage: the slim runtime image deliberately carries no Prisma CLI.
   migrate:
     build:
       context: .
       dockerfile: infrastructure/docker/api.Dockerfile
+      target: build
     depends_on:
       postgres: { condition: service_healthy }
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-kidslearn}?schema=public
-    command: ["node_modules/.bin/prisma", "migrate", "deploy", "--schema", "prisma/schema.prisma"]
+    command: ["pnpm", "exec", "prisma", "migrate", "deploy", "--schema", "prisma/schema.prisma"]
     restart: "no"
     networks: [kidslearn]
 

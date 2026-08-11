@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 import { cn, formatDuration } from "@/lib/utils";
 import { toneStyles, type Tone } from "@/lib/tone";
-import { useT } from "@/i18n/provider";
+import { useI18n, useT } from "@/i18n/provider";
 import type { StatisticsPreset } from "@kidslearn/types";
 import { useChildContext } from "@/components/providers/child-provider";
 import { fetchStatistics, queryKeys } from "@/lib/api/queries";
@@ -44,6 +44,7 @@ function useChildStatistics(preset: StatisticsPreset) {
 
 export function ProgressView() {
   const t = useT();
+  const { locale } = useI18n();
   const [preset, setPreset] = useState<StatisticsPreset>("week");
   const { child, childrenLoading, query } = useChildStatistics(preset);
 
@@ -92,7 +93,7 @@ export function ProgressView() {
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-        <StatCard tone="brand" glyph="⏱️" label={t("analytics.totalTime")} value={formatDuration(Math.round((progress?.learningSeconds ?? 0) / 60))} />
+        <StatCard tone="brand" glyph="⏱️" label={t("analytics.totalTime")} value={formatDuration(Math.round((progress?.learningSeconds ?? 0) / 60), locale)} />
         <StatCard tone="mint" glyph="📗" label={t("parent.lessonsCompleted")} value={progress?.lessonsCompleted ?? 0} />
         <StatCard tone="blossom" glyph="🎮" label={t("analytics.gamesPlayed")} value={progress?.gamesPlayed ?? 0} />
         <StatCard tone="sun" glyph="⭐" label={t("common.stars")} value={progress?.stars ?? 0} />
@@ -168,6 +169,7 @@ function TopicCard({
 
 export function StatisticsView() {
   const t = useT();
+  const { locale } = useI18n();
   const [preset, setPreset] = useState<StatisticsPreset>("week");
   const { children, selectedChild, selectChild } = useChildContext();
   const { query } = useChildStatistics(preset);
@@ -230,7 +232,7 @@ export function StatisticsView() {
             tone="brand"
             glyph="⏱️"
             label={t("analytics.learningTime")}
-            value={formatDuration(Math.round((stats?.learningSeconds ?? 0) / 60))}
+            value={formatDuration(Math.round((stats?.learningSeconds ?? 0) / 60), locale)}
             delta={{ value: stats?.deltas.learningSeconds ?? 0, suffix: "%", label: t("analytics.vsLastPeriod") }}
           />
           <StatCard
