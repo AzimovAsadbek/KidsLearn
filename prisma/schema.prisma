@@ -1074,6 +1074,11 @@ model Notification {
   glyph String  @default("🔔")
   tone  String  @default("brand")
   href  String?
+  /// System notifications carry a message key + params and are rendered in the
+  /// recipient's locale at read time. Custom announcements leave this null and
+  /// use the stored title/body verbatim.
+  messageKey String?
+  params     Json?
   /// Which child the notification is about, when relevant.
   childId String?
 

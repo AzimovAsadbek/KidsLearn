@@ -88,6 +88,9 @@ test.describe("parent", () => {
 
     const name = `E2E ${Date.now().toString().slice(-5)}`;
     const dialog = page.getByRole("dialog");
+    // First visit may compile the route on a cold dev server; wait for the
+    // deep-linked (?add=1) dialog itself before interacting.
+    await expect(dialog).toBeVisible({ timeout: 45_000 });
     await dialog.getByLabel("Child's name").fill(name);
     await dialog.getByLabel("Date of birth").fill("2022-04-01");
     await dialog.getByRole("button", { name: "Next" }).click();

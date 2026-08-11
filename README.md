@@ -258,6 +258,28 @@ the API process, so a rolling deploy cannot race itself.
 
 ---
 
+## Product scope notes
+
+Three content groups are intentionally **not** CMS-managed, interpreted against the requirement
+that an administrator can manage platform content:
+
+- **Lessons, subjects, categories, media, AI assets, feature flags and announcements** are fully
+  manageable from the admin console against live endpoints — this is the platform's content.
+- **The curated shelf (books, videos, off-screen activities)** is static product content shipped
+  with the app (`apps/web/src/data/library.ts`), carrying its titles in all three languages
+  inline. There is no backend model for it; changing it is a code change by design.
+- **Game engines and their question banks, achievement and reward definitions** are code and
+  seed-managed. The admin console shows them honestly as read-only (live unlock/claim/play data,
+  no fake editors); adding an editor would require new write endpoints and validation models that
+  are out of scope for this phase.
+
+System notifications store a `messageKey` + params and render in each recipient's locale at read
+time (`apps/api/src/notifications/notification-messages.ts`); custom admin announcements are
+stored verbatim. `pnpm --filter @kidslearn/api audit:translations` verifies that every piece of
+educational content has real uz/ru/en translations — not English fallbacks.
+
+---
+
 ## CI
 
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml): install → generate → lint → typecheck →

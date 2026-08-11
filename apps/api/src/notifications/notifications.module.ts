@@ -73,12 +73,16 @@ export class NotificationsController {
   @ApiOperation({ summary: "Notification centre for the signed-in user" })
   @ApiPaginatedResponse(NotificationResponse)
   async list(@CurrentUser() user: RequestUser, @Query() query: NotificationQueryDto) {
-    const { items, total, unread } = await this.notifications.list(user.id, {
-      skip: query.skip,
-      take: query.limit,
-      read: query.read,
-      type: query.type,
-    });
+    const { items, total, unread } = await this.notifications.list(
+      user.id,
+      {
+        skip: query.skip,
+        take: query.limit,
+        read: query.read,
+        type: query.type,
+      },
+      user.locale,
+    );
     return withMeta(items, { ...paginationMeta(total, query.page, query.limit), unread });
   }
 

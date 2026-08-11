@@ -206,7 +206,7 @@ async function main() {
       type: "TEXT" | "QUESTION";
       glyph?: string;
       body?: ReturnType<typeof t>;
-      sayIt?: string;
+      sayIt?: ReturnType<typeof t>;
       prompt?: ReturnType<typeof t>;
       options?: Array<{ glyph: string; correct?: boolean; labels: ReturnType<typeof t> }>;
     }>;
@@ -225,8 +225,8 @@ async function main() {
       status: "PUBLISHED",
       titles: t("Atrofimizdagi ranglar", "Цвета вокруг нас", "Colors Around Us"),
       blocks: [
-        { type: "TEXT", glyph: "🔴", body: t("Qizil olma.", "Красное яблоко.", "A red apple."), sayIt: "Red" },
-        { type: "TEXT", glyph: "🔵", body: t("Ko'k osmon.", "Синее небо.", "The blue sky."), sayIt: "Blue" },
+        { type: "TEXT", glyph: "🔴", body: t("Qizil olma.", "Красное яблоко.", "A red apple."), sayIt: t("Qizil", "Красный", "Red") },
+        { type: "TEXT", glyph: "🔵", body: t("Ko'k osmon.", "Синее небо.", "The blue sky."), sayIt: t("Ko'k", "Синий", "Blue") },
         {
           type: "QUESTION",
           prompt: t("Qaysi biri qizil?", "Какой из них красный?", "Which one is red?"),
@@ -237,7 +237,7 @@ async function main() {
             { glyph: "🟡", labels: t("Sariq", "Жёлтый", "Yellow") },
           ],
         },
-        { type: "TEXT", glyph: "🟢", body: t("Yashil o't.", "Зелёная трава.", "Green grass."), sayIt: "Green" },
+        { type: "TEXT", glyph: "🟢", body: t("Yashil o't.", "Зелёная трава.", "Green grass."), sayIt: t("Yashil", "Зелёный", "Green") },
         {
           type: "QUESTION",
           prompt: t("Qaysi biri yashil?", "Какой из них зелёный?", "Which one is green?"),
@@ -261,8 +261,8 @@ async function main() {
       status: "PUBLISHED",
       titles: t("Raqamlarni o'rganamiz", "Учим числа", "Learn Numbers"),
       blocks: [
-        { type: "TEXT", glyph: "🍎", body: t("Bitta olma.", "Одно яблоко.", "One apple."), sayIt: "One" },
-        { type: "TEXT", glyph: "🍌", body: t("Ikkita banan.", "Два банана.", "Two bananas."), sayIt: "Two" },
+        { type: "TEXT", glyph: "🍎", body: t("Bitta olma.", "Одно яблоко.", "One apple."), sayIt: t("Bir", "Один", "One") },
+        { type: "TEXT", glyph: "🍌", body: t("Ikkita banan.", "Два банана.", "Two bananas."), sayIt: t("Ikki", "Два", "Two") },
         {
           type: "QUESTION",
           prompt: t("Nechta yulduz bor? ⭐⭐", "Сколько звёзд? ⭐⭐", "How many stars? ⭐⭐"),
@@ -273,7 +273,7 @@ async function main() {
             { glyph: "4️⃣", labels: t("To'rt", "Четыре", "Four") },
           ],
         },
-        { type: "TEXT", glyph: "🥕", body: t("Uchta sabzi.", "Три моркови.", "Three carrots."), sayIt: "Three" },
+        { type: "TEXT", glyph: "🥕", body: t("Uchta sabzi.", "Три моркови.", "Three carrots."), sayIt: t("Uch", "Три", "Three") },
       ],
     },
     {
@@ -288,8 +288,8 @@ async function main() {
       status: "PUBLISHED",
       titles: t("Hayvonlar olami", "Мир животных", "Animals World"),
       blocks: [
-        { type: "TEXT", glyph: "🐘", body: t("Fil katta.", "Слон большой.", "The elephant is big."), sayIt: "Elephant" },
-        { type: "TEXT", glyph: "🦁", body: t("Sher baqiradi.", "Лев рычит.", "The lion roars."), sayIt: "Lion" },
+        { type: "TEXT", glyph: "🐘", body: t("Fil katta.", "Слон большой.", "The elephant is big."), sayIt: t("Fil", "Слон", "Elephant") },
+        { type: "TEXT", glyph: "🦁", body: t("Sher baqiradi.", "Лев рычит.", "The lion roars."), sayIt: t("Sher", "Лев", "Lion") },
         {
           type: "QUESTION",
           prompt: t("Kim baqiradi?", "Кто рычит?", "Which animal roars?"),
@@ -313,8 +313,8 @@ async function main() {
       status: "PUBLISHED",
       titles: t("Alifbo", "Алфавит", "Alphabet"),
       blocks: [
-        { type: "TEXT", glyph: "🅰️", body: t("A — Olma.", "A — Apple.", "A is for Apple."), sayIt: "A" },
-        { type: "TEXT", glyph: "🅱️", body: t("B — Ball.", "B — Мяч.", "B is for Ball."), sayIt: "B" },
+        { type: "TEXT", glyph: "🅰️", body: t("A — Olma.", "A — Apple.", "A is for Apple."), sayIt: t("A", "А", "A") },
+        { type: "TEXT", glyph: "🅱️", body: t("B — Ball.", "B — Мяч.", "B is for Ball."), sayIt: t("B", "Б", "B") },
         {
           type: "QUESTION",
           prompt: t("Qaysi biri A harfi?", "Какая буква A?", "Which one is the letter A?"),
@@ -338,8 +338,8 @@ async function main() {
       status: "PUBLISHED",
       titles: t("Shakllar va naqshlar", "Фигуры и узоры", "Shapes & Patterns"),
       blocks: [
-        { type: "TEXT", glyph: "⭕", body: t("Doira dumaloq.", "Круг круглый.", "A circle is round."), sayIt: "Circle" },
-        { type: "TEXT", glyph: "🟦", body: t("Kvadratda to'rt tomon.", "У квадрата четыре стороны.", "A square has four sides."), sayIt: "Square" },
+        { type: "TEXT", glyph: "⭕", body: t("Doira dumaloq.", "Круг круглый.", "A circle is round."), sayIt: t("Doira", "Круг", "Circle") },
+        { type: "TEXT", glyph: "🟦", body: t("Kvadratda to'rt tomon.", "У квадрата четыре стороны.", "A square has four sides."), sayIt: t("Kvadrat", "Квадрат", "Square") },
         {
           type: "QUESTION",
           prompt: t("Qaysi shakl dumaloq?", "Какая фигура круглая?", "Which shape is round?"),
@@ -363,7 +363,7 @@ async function main() {
       status: "PUBLISHED",
       titles: t("O'ngacha sanash", "Считаем до десяти", "Counting to Ten"),
       blocks: [
-        { type: "TEXT", glyph: "🦆", body: t("Oltita o'rdak.", "Шесть уток.", "Six ducks."), sayIt: "Six" },
+        { type: "TEXT", glyph: "🦆", body: t("Oltita o'rdak.", "Шесть уток.", "Six ducks."), sayIt: t("Olti", "Шесть", "Six") },
         {
           type: "QUESTION",
           prompt: t("7 dan keyin nima keladi?", "Что идёт после 7?", "What comes after 7?"),
@@ -387,7 +387,7 @@ async function main() {
       status: "PUBLISHED",
       titles: t("Ranglarni aralashtirish", "Смешиваем цвета", "Mixing Colors"),
       blocks: [
-        { type: "TEXT", glyph: "🟠", body: t("Qizil va sariq — to'q sariq!", "Красный и жёлтый — оранжевый!", "Red and yellow make orange!"), sayIt: "Orange" },
+        { type: "TEXT", glyph: "🟠", body: t("Qizil va sariq — to'q sariq!", "Красный и жёлтый — оранжевый!", "Red and yellow make orange!"), sayIt: t("To'q sariq", "Оранжевый", "Orange") },
         {
           type: "QUESTION",
           prompt: t("Ko'k va sariq qanday rang beradi?", "Какой цвет дают синий и жёлтый?", "What do blue and yellow make?"),
@@ -409,7 +409,7 @@ async function main() {
       tone: "coral",
       status: "REVIEW",
       titles: t("Beshta sezgim", "Пять моих чувств", "My Five Senses"),
-      blocks: [{ type: "TEXT", glyph: "👀", body: t("Biz ko'z bilan ko'ramiz.", "Мы видим глазами.", "We see with our eyes."), sayIt: "See" }],
+      blocks: [{ type: "TEXT", glyph: "👀", body: t("Biz ko'z bilan ko'ramiz.", "Мы видим глазами.", "We see with our eyes."), sayIt: t("Ko'rish", "Видеть", "See") }],
     },
     {
       slug: "fruit-basket",
@@ -421,7 +421,7 @@ async function main() {
       tone: "grape",
       status: "DRAFT",
       titles: t("Meva savati", "Корзина фруктов", "Fruit Basket"),
-      blocks: [{ type: "TEXT", glyph: "🍇", body: t("Uzum shirin.", "Виноград сладкий.", "Grapes are sweet."), sayIt: "Grapes" }],
+      blocks: [{ type: "TEXT", glyph: "🍇", body: t("Uzum shirin.", "Виноград сладкий.", "Grapes are sweet."), sayIt: t("Uzum", "Виноград", "Grapes") }],
     },
   ];
 
@@ -460,7 +460,7 @@ async function main() {
               locale: n.locale,
               title: null,
               body: block.type === "TEXT" ? n.value : null,
-              sayIt: block.sayIt ?? null,
+              sayIt: block.sayIt?.find((word) => word.locale === n.locale)?.value ?? null,
             })),
           },
         },
@@ -500,14 +500,14 @@ async function main() {
     { key: "orange", glyph: "🟠", tone: "tangerine", labels: t("To'q sariq", "Оранжевый", "Orange") },
   ];
   const ANIMALS = [
-    { key: "cow", glyph: "🐄", sound: "Moo!", labels: t("Sigir", "Корова", "Cow") },
-    { key: "dog", glyph: "🐶", sound: "Woof woof!", labels: t("It", "Собака", "Dog") },
-    { key: "cat", glyph: "🐱", sound: "Meow!", labels: t("Mushuk", "Кошка", "Cat") },
-    { key: "duck", glyph: "🦆", sound: "Quack!", labels: t("O'rdak", "Утка", "Duck") },
-    { key: "lion", glyph: "🦁", sound: "Roar!", labels: t("Sher", "Лев", "Lion") },
-    { key: "sheep", glyph: "🐑", sound: "Baa!", labels: t("Qo'y", "Овца", "Sheep") },
-    { key: "frog", glyph: "🐸", sound: "Ribbit!", labels: t("Qurbaqa", "Лягушка", "Frog") },
-    { key: "bee", glyph: "🐝", sound: "Bzzzz!", labels: t("Asalari", "Пчела", "Bee") },
+    { key: "cow", glyph: "🐄", sound: t("Mo'-o'!", "Му-у!", "Moo!"), labels: t("Sigir", "Корова", "Cow") },
+    { key: "dog", glyph: "🐶", sound: t("Vov-vov!", "Гав-гав!", "Woof woof!"), labels: t("It", "Собака", "Dog") },
+    { key: "cat", glyph: "🐱", sound: t("Miyov!", "Мяу!", "Meow!"), labels: t("Mushuk", "Кошка", "Cat") },
+    { key: "duck", glyph: "🦆", sound: t("G'aq-g'aq!", "Кря-кря!", "Quack!"), labels: t("O'rdak", "Утка", "Duck") },
+    { key: "lion", glyph: "🦁", sound: t("Arr-r!", "Р-р-р!", "Roar!"), labels: t("Sher", "Лев", "Lion") },
+    { key: "sheep", glyph: "🐑", sound: t("Ba-a!", "Бе-е!", "Baa!"), labels: t("Qo'y", "Овца", "Sheep") },
+    { key: "frog", glyph: "🐸", sound: t("Qur-qur!", "Ква-ква!", "Ribbit!"), labels: t("Qurbaqa", "Лягушка", "Frog") },
+    { key: "bee", glyph: "🐝", sound: t("G'uv-g'uv!", "Ж-ж-ж!", "Bzzzz!"), labels: t("Asalari", "Пчела", "Bee") },
   ];
   const LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H", "K", "M", "O", "S"];
   const COUNTABLES = ["🍎", "⭐", "🎈", "🐟", "🌸", "🍪"];
@@ -601,7 +601,7 @@ async function main() {
         promptTone: "tangerine",
         order: index,
         translations: {
-          create: [Locale.UZ, Locale.RU, Locale.EN].map((locale) => ({ locale, prompt: animal.sound })),
+          create: animal.sound.map((n) => ({ locale: n.locale, prompt: n.value })),
         },
       },
     });
@@ -961,13 +961,56 @@ async function main() {
 
   /* --- Notifications ----------------------------------------------------- */
   const firstChild = await prisma.child.findFirstOrThrow({ where: { parentId: parent.id } });
+  // Sample notifications carry message keys so they render in the parent's
+  // locale from the very first sign-in, exactly like live system events.
   await prisma.notification.createMany({
     data: [
-      { userId: parent.id, type: "ACHIEVEMENT_EARNED", title: `${firstChild.name} earned a Gold Medal`, body: "100 stars collected — a big milestone.", glyph: "🏆", tone: "sun", href: "/achievements", childId: firstChild.id },
-      { userId: parent.id, type: "NEW_LESSON", title: "New lesson added", body: '"Mixing Colors" is now available for ages 5–7.', glyph: "📚", tone: "mint", href: "/lessons" },
-      { userId: parent.id, type: "STREAK", title: `${firstChild.name} kept a streak going`, body: "Another day of learning in a row.", glyph: "🔥", tone: "tangerine", href: "/progress", childId: firstChild.id },
-      { userId: parent.id, type: "LESSON_REMINDER", title: "Today's goal isn't finished", body: "Two lessons left to reach today's goal.", glyph: "💡", tone: "sky", href: "/children", readAt: new Date() },
-      { userId: parent.id, type: "SYSTEM", title: "Weekly report is ready", body: "See how the family did this week.", glyph: "📊", tone: "brand", href: "/statistics", readAt: new Date() },
+      {
+        userId: parent.id, type: "ACHIEVEMENT_EARNED",
+        title: `${firstChild.name} earned Gold Medal`, body: "100 stars collected — a big milestone.",
+        glyph: "🏆", tone: "sun", href: "/achievements", childId: firstChild.id,
+        messageKey: "achievement.earned",
+        params: {
+          child: firstChild.name,
+          achievement: { en: "Gold Medal", uz: "Oltin medal", ru: "Золотая медаль" },
+          description: {
+            en: "100 stars collected — a big milestone.",
+            uz: "100 ta yulduz to'plandi — katta yutuq.",
+            ru: "Собрано 100 звёзд — большая веха.",
+          },
+        },
+      },
+      {
+        userId: parent.id, type: "NEW_LESSON",
+        title: "New lesson added", body: '"Mixing Colors" is now available.',
+        glyph: "📚", tone: "mint", href: "/lessons",
+        messageKey: "lesson.new",
+        params: {
+          lessonTitle: {
+            en: "Mixing Colors",
+            uz: "Ranglarni aralashtirish",
+            ru: "Смешиваем цвета",
+          },
+        },
+      },
+      {
+        userId: parent.id, type: "STREAK",
+        title: `${firstChild.name} kept a streak going`, body: "Another day of learning in a row.",
+        glyph: "🔥", tone: "tangerine", href: "/progress", childId: firstChild.id,
+        messageKey: "streak.kept", params: { child: firstChild.name },
+      },
+      {
+        userId: parent.id, type: "LESSON_REMINDER",
+        title: "Today's learning isn't finished", body: `${firstChild.name}: today's goal is still open.`,
+        glyph: "💡", tone: "sky", href: "/children", readAt: new Date(),
+        messageKey: "lesson.reminder", params: { names: firstChild.name },
+      },
+      {
+        userId: parent.id, type: "SYSTEM",
+        title: "Weekly report is ready", body: "This week: 132 min, 9 lessons, 41 stars.",
+        glyph: "📊", tone: "brand", href: "/statistics", readAt: new Date(),
+        messageKey: "report.weekly", params: { minutes: 132, lessons: 9, stars: 41 },
+      },
     ],
   });
 

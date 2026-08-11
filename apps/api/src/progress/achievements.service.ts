@@ -128,7 +128,7 @@ export class AchievementsService {
         }),
       ]);
 
-      await this.notifyParent(childId, dto).catch((error: Error) =>
+      await this.notifyParent(childId, dto, definition.translations).catch((error: Error) =>
         this.logger.warn(`Could not notify parent about ${dto.code}: ${error.message}`),
       );
     }
@@ -185,12 +185,23 @@ export class AchievementsService {
     }
   }
 
-  private async notifyParent(childId: string, achievement: AchievementDto): Promise<void> {
+  private async notifyParent(
+    childId: string,
+    achievement: AchievementDto,
+    translations: Array<{ locale: PrismaLocale; title: string; description: string | null }>,
+  ): Promise<void> {
     const child = await this.prisma.child.findUnique({
       where: { id: childId },
       select: { name: true, parentId: true },
     });
     if (!child) return;
+
+    // Snapshot the achievement copy in every locale so the notification renders
+    // in whatever language the parent reads it in — now or after switching.
+    const byLocale = (pick: (t: { title: string; description: string | null }) => string | null) =>
+      Object.fromEntries(
+        translations.map((entry) => [entry.locale.toLowerCase(), pick(entry) ?? ""]),
+      ) as Record<string, string>;
 
     await this.prisma.notification.create({
       data: {
@@ -202,6 +213,12 @@ export class AchievementsService {
         tone: achievement.tone,
         href: "/achievements",
         childId,
+        messageKey: "achievement.earned",
+        params: {
+          child: child.name,
+          achievement: byLocale((entry) => entry.title),
+          description: byLocale((entry) => entry.description),
+        },
       },
     });
   }

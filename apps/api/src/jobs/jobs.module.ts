@@ -29,12 +29,17 @@ interface BroadcastPushPayload {
   title: string;
   body: string;
   href?: string;
+  /** When present, the push is re-rendered in each recipient's locale. */
+  messageKey?: string;
+  params?: Record<string, unknown>;
 }
 
 interface NewLessonPayload {
   lessonId: string;
   title: string;
   slug: string;
+  /** Title snapshot in every locale, for per-recipient rendering. */
+  titles?: Record<string, string>;
 }
 
 @Processor(QUEUES.NOTIFICATIONS)
@@ -65,12 +70,22 @@ export class NotificationsProcessor extends WorkerHost {
         const payload = job.data as BroadcastPushPayload;
         // Fan out to every user that has at least one push subscription. Dead
         // subscriptions are pruned inside sendPush, so retries shrink the set.
-        const subscribers = await this.prisma.pushSubscription.groupBy({ by: ["userId"] });
+        const subscribers = await this.prisma.user.findMany({
+          where: { pushSubscriptions: { some: {} } },
+          select: { id: true, locale: true },
+        });
         let delivered = 0;
         for (const subscriber of subscribers) {
-          delivered += await this.notifications.sendPush(subscriber.userId, {
-            title: payload.title,
-            body: payload.body,
+          const rendered = payload.messageKey
+            ? this.notifications.renderFor(
+                subscriber.locale,
+                payload.messageKey,
+                payload.params as Parameters<typeof this.notifications.renderFor>[2],
+              )
+            : null;
+          delivered += await this.notifications.sendPush(subscriber.id, {
+            title: rendered?.title ?? payload.title,
+            body: rendered?.body ?? payload.body,
             href: payload.href,
           });
         }
@@ -87,6 +102,7 @@ export class NotificationsProcessor extends WorkerHost {
         });
         if (already > 0) return { skipped: true };
 
+        const lessonTitle = payload.titles ?? { en: payload.title };
         const reach = await this.notifications.notifyAllParents({
           type: NotificationType.NEW_LESSON,
           title: "New lesson added",
@@ -94,11 +110,19 @@ export class NotificationsProcessor extends WorkerHost {
           glyph: "📚",
           tone: "mint",
           href: `/lessons?highlight=${payload.lessonId}`,
+          messageKey: "lesson.new",
+          params: { lessonTitle },
         });
 
         await this.queue.add(
           JOBS.BROADCAST_PUSH,
-          { title: "New lesson on KidsLearn", body: `"${payload.title}" is ready to try.`, href: "/lessons" },
+          {
+            title: "New lesson added",
+            body: `"${payload.title}" is now available.`,
+            href: "/lessons",
+            messageKey: "lesson.new",
+            params: { lessonTitle },
+          },
           { jobId: `new-lesson-push-${payload.lessonId}` },
         );
         return { reach };
@@ -125,6 +149,7 @@ export class SchedulerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokens: TokenService,
+    private readonly notifications: NotificationsService,
     @InjectQueue(QUEUES.NOTIFICATIONS) private readonly queue: Queue,
   ) {}
 
@@ -179,20 +204,30 @@ export class SchedulerService {
       if (behind.length === 0) continue;
 
       const names = behind.map((child) => child.name).join(", ");
+      // The push leaves the app, so it is rendered in the parent's locale at
+      // enqueue time; the in-app row stores the key and renders at read time.
+      const rendered = this.notifications.renderFor(parent.locale, "lesson.reminder", { names });
       await this.prisma.notification.create({
         data: {
           userId: parent.id,
           type: NotificationType.LESSON_REMINDER,
           title: "Today's learning isn't finished",
-          body: `${names} ${behind.length === 1 ? "hasn't" : "haven't"} reached today's goal yet.`,
+          body: `${names}: today's goal is still open.`,
           glyph: "💡",
           tone: "sky",
           href: "/children",
+          messageKey: "lesson.reminder",
+          params: { names },
         },
       });
       await this.queue.add(
         JOBS.SEND_PUSH,
-        { userId: parent.id, title: "KidsLearn reminder", body: `${names}: today's goal is still open.`, href: "/children" },
+        {
+          userId: parent.id,
+          title: rendered?.title ?? "KidsLearn reminder",
+          body: rendered?.body ?? `${names}: today's goal is still open.`,
+          href: "/children",
+        },
         { jobId: `reminder-${parent.id}-${dayKey}` },
       );
       sent += 1;
@@ -230,15 +265,19 @@ export class SchedulerService {
       });
 
       const minutes = Math.round((totals._sum.learningSeconds ?? 0) / 60);
+      const lessons = totals._sum.lessonsCompleted ?? 0;
+      const stars = totals._sum.starsEarned ?? 0;
       await this.prisma.notification.create({
         data: {
           userId: parent.id,
           type: NotificationType.SYSTEM,
           title: "Weekly report is ready",
-          body: `This week: ${minutes} minutes, ${totals._sum.lessonsCompleted ?? 0} lessons, ${totals._sum.starsEarned ?? 0} stars.`,
+          body: `This week: ${minutes} min, ${lessons} lessons, ${stars} stars.`,
           glyph: "📊",
           tone: "brand",
           href: "/statistics",
+          messageKey: "report.weekly",
+          params: { minutes, lessons, stars },
         },
       });
       await this.queue.add(

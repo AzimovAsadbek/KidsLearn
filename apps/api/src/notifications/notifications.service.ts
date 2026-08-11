@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import webpush from "web-push";
 import { NotificationType, type NotificationDto, type PushStatusDto } from "@kidslearn/types";
 import type { Prisma } from "@kidslearn/database";
+import { renderNotificationMessage, type MessageParams } from "./notification-messages";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { AppException } from "../common/errors/app-exception";
 import type { PushConfig } from "../common/config/configuration";
@@ -10,12 +11,16 @@ import type { PushConfig } from "../common/config/configuration";
 export interface CreateNotificationInput {
   userId: string;
   type: NotificationType;
+  /** Stored as the English fallback; recipients see their own locale when a messageKey is set. */
   title: string;
   body: string;
   glyph?: string;
   tone?: string;
   href?: string | null;
   childId?: string | null;
+  /** Catalog key for locale-aware rendering; omit for verbatim custom copy. */
+  messageKey?: string;
+  params?: MessageParams;
 }
 
 @Injectable()
@@ -40,12 +45,17 @@ export class NotificationsService {
     }
   }
 
-  toDto(row: Prisma.NotificationGetPayload<object>): NotificationDto {
+  toDto(row: Prisma.NotificationGetPayload<object>, locale = "en"): NotificationDto {
+    // System notifications render in the recipient's language; anything without
+    // a known message key keeps its stored copy verbatim.
+    const rendered = row.messageKey
+      ? renderNotificationMessage(locale, row.messageKey, row.params as MessageParams | null)
+      : null;
     return {
       id: row.id,
       type: row.type,
-      title: row.title,
-      body: row.body,
+      title: rendered?.title ?? row.title,
+      body: rendered?.body ?? row.body,
       glyph: row.glyph,
       tone: row.tone,
       href: row.href,
@@ -54,7 +64,16 @@ export class NotificationsService {
     };
   }
 
-  async list(userId: string, params: { skip: number; take: number; read?: boolean; type?: NotificationType }) {
+  /** Rendered copy for out-of-band delivery (web push) in a specific locale. */
+  renderFor(locale: string, messageKey: string, params: MessageParams | null | undefined) {
+    return renderNotificationMessage(locale, messageKey, params);
+  }
+
+  async list(
+    userId: string,
+    params: { skip: number; take: number; read?: boolean; type?: NotificationType },
+    locale = "en",
+  ) {
     const where: Prisma.NotificationWhereInput = {
       userId,
       ...(params.read === undefined ? {} : params.read ? { readAt: { not: null } } : { readAt: null }),
@@ -72,7 +91,7 @@ export class NotificationsService {
       this.prisma.notification.count({ where: { userId, readAt: null } }),
     ]);
 
-    return { items: rows.map((row) => this.toDto(row)), total, unread };
+    return { items: rows.map((row) => this.toDto(row, locale)), total, unread };
   }
 
   async create(input: CreateNotificationInput): Promise<NotificationDto> {
@@ -86,6 +105,8 @@ export class NotificationsService {
         tone: input.tone ?? "brand",
         href: input.href ?? null,
         childId: input.childId ?? null,
+        messageKey: input.messageKey ?? null,
+        params: (input.params as Prisma.InputJsonValue | undefined) ?? undefined,
       },
     });
     return this.toDto(row);
@@ -212,6 +233,8 @@ export class NotificationsService {
         glyph: input.glyph ?? "🔔",
         tone: input.tone ?? "brand",
         href: input.href ?? null,
+        messageKey: input.messageKey ?? null,
+        params: (input.params as Prisma.InputJsonValue | undefined) ?? undefined,
       })),
     });
 

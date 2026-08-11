@@ -241,10 +241,15 @@ export class LessonsService {
     // makes re-publishing after an archive a no-op.
     if (goingLive && !current.publishedAt) {
       const title = pickTranslation(lesson.translations, toPrismaLocale("en"))?.title ?? lesson.slug;
+      // Every locale's title rides along so each family is notified in its own
+      // language, whenever and however they read the notification.
+      const titles = Object.fromEntries(
+        lesson.translations.map((entry) => [entry.locale.toLowerCase(), entry.title]),
+      );
       await this.notificationsQueue
         .add(
           JOBS.NEW_LESSON_BROADCAST,
-          { lessonId: lesson.id, title, slug: lesson.slug },
+          { lessonId: lesson.id, title, slug: lesson.slug, titles },
           { jobId: `new-lesson-${lesson.id}` },
         )
         .catch(() => undefined);
