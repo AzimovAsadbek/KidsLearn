@@ -9,7 +9,7 @@ import { useSession } from "@/components/providers/session-provider";
 import { ApiError } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Field, Input } from "@/components/ui/field";
-import { AuthFooterLink, AuthHeading, FormAlert, SocialRow } from "./auth-parts";
+import { AuthFooterLink, AuthHeading, FormAlert } from "./auth-parts";
 
 /**
  * Signs in against the real API. The seeded development account is prefilled so
@@ -117,7 +117,6 @@ export function LoginForm() {
         </Button>
       </form>
 
-      <SocialRow label={t("auth.orContinue")} />
       <AuthFooterLink prompt={t("auth.noAccount")} href="/register" action={t("auth.signUp")} />
     </div>
   );

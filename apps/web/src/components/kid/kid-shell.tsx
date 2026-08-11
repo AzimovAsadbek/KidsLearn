@@ -43,10 +43,31 @@ export function KidShell({ children }: { children: ReactNode }) {
     );
   }
 
-  if (loading || !selectedChild) {
+  if (loading) {
     return (
       <div className="canvas-kid min-h-dvh">
         <KidLoading />
+      </div>
+    );
+  }
+
+  // A family with no learner profiles yet: say so instead of spinning forever.
+  if (!selectedChild) {
+    return (
+      <div className="canvas-kid grid min-h-dvh place-items-center px-4">
+        <div className="max-w-sm rounded-3xl border-2 border-border bg-surface p-8 text-center shadow-card">
+          <span className="text-6xl" aria-hidden>
+            👶
+          </span>
+          <h1 className="font-display mt-4 text-2xl font-extrabold text-content">{t("kid.noProfilesTitle")}</h1>
+          <p className="t-body-sm mt-2 font-semibold text-content-secondary">{t("kid.noProfilesBody")}</p>
+          <Link
+            href="/dashboard"
+            className="tactile mt-6 inline-flex h-12 items-center justify-center rounded-2xl bg-primary px-6 font-extrabold text-primary-on"
+          >
+            {t("kid.goToParent")}
+          </Link>
+        </div>
       </div>
     );
   }
@@ -185,11 +206,11 @@ function ParentGate({ open, onClose }: { open: boolean; onClose: () => void }) {
     }
   }
 
-  function leaveWithoutPin() {
+  function leave(target: string) {
     onClose();
     setPin("");
     setUnconfigured(false);
-    router.push("/settings");
+    router.push(target);
   }
 
   return (
@@ -203,13 +224,18 @@ function ParentGate({ open, onClose }: { open: boolean; onClose: () => void }) {
           <div className="mt-5">
             <p className="t-body-sm font-semibold text-content">{t("auth.pinNotSetTitle")}</p>
             <p className="t-caption mt-1 text-content-secondary">{t("auth.pinNotSetBody")}</p>
-            <div className="mt-5 flex gap-2">
-              <Button variant="ghost" fullWidth onClick={onClose}>
-                {t("common.cancel")}
+            <div className="mt-5 flex flex-col gap-2">
+              <Button fullWidth onClick={() => leave("/dashboard")}>
+                {t("auth.pinGoDashboard")}
               </Button>
-              <Button fullWidth onClick={leaveWithoutPin}>
-                {t("auth.pinGoSetUp")}
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="ghost" fullWidth onClick={onClose}>
+                  {t("common.cancel")}
+                </Button>
+                <Button variant="secondary" fullWidth onClick={() => leave("/settings")}>
+                  {t("auth.pinGoSetUp")}
+                </Button>
+              </div>
             </div>
           </div>
         ) : (

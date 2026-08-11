@@ -8,7 +8,7 @@ import { useSession } from "@/components/providers/session-provider";
 import { ApiError } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { Checkbox, Field, Input } from "@/components/ui/field";
-import { AuthFooterLink, AuthHeading, FormAlert, PasswordStrength, SocialRow } from "./auth-parts";
+import { AuthFooterLink, AuthHeading, FormAlert, PasswordStrength } from "./auth-parts";
 
 export function RegisterForm() {
   const t = useT();
@@ -153,7 +153,6 @@ export function RegisterForm() {
         </Button>
       </form>
 
-      <SocialRow label={t("auth.orContinue")} />
       <AuthFooterLink prompt={t("auth.hasAccount")} href="/login" action={t("auth.signIn")} />
     </div>
   );

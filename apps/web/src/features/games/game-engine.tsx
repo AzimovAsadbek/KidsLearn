@@ -623,7 +623,7 @@ function GameComplete({
         {[
           [t("game.score"), `${result.score}/${result.total}`, "🎯"],
           [t("game.accuracy"), `${result.accuracy}%`, "✅"],
-          [t("game.time"), `${result.durationSeconds}s`, "⏱️"],
+          [t("game.time"), `${Math.floor(result.durationSeconds / 60)}:${String(result.durationSeconds % 60).padStart(2, "0")}`, "⏱️"],
         ].map(([label, value, glyph]) => (
           <div key={label} className="rounded-2xl border-2 border-border bg-surface px-5 py-4 shadow-soft">
             <p className="text-2xl" aria-hidden>

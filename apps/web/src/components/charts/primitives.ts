@@ -42,7 +42,11 @@ export function niceMax(value: number): number {
 }
 
 export function ticksFor(max: number, count = 4): number[] {
-  return Array.from({ length: count + 1 }, (_, i) => Math.round((max / count) * i));
+  // Rounding can collapse neighbouring ticks on small scales (max=1 would
+  // yield 0,0,1,1,1). Ticks double as React keys, so they must be unique —
+  // and an axis gains nothing from repeating a value anyway.
+  const ticks = Array.from({ length: count + 1 }, (_, i) => Math.round((max / count) * i));
+  return [...new Set(ticks)];
 }
 
 export interface Scaled {
