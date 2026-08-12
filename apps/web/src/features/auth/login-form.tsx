@@ -21,8 +21,8 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   const { signIn } = useSession();
 
-  const [email, setEmail] = useState("parent@kidslearn.app");
-  const [password, setPassword] = useState("kidslearn2026");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [formError, setFormError] = useState<string | null>(null);
