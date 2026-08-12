@@ -1,8 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Ships only the traced server into the Docker runtime image.
-  output: "standalone",
+  // Ships only the traced server into the Docker runtime image. Vercel has
+  // its own output pipeline and the two collide, so standalone is skipped there.
+  output: process.env.VERCEL ? undefined : "standalone",
   outputFileTracingRoot: __dirname + "/../..",
   // The shared contract package is TypeScript source in the workspace.
   transpilePackages: ["@kidslearn/types"],
