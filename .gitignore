@@ -43,3 +43,7 @@ CLAUDE.md
 Thumbs.db
 *.pem
 .vercel
+
+.vercel
+.env*
+.env.local

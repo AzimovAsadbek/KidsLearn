@@ -1,0 +1,8 @@
+node_modules
+.next
+dist
+.vercel/output
+packages/database/generated
+test-results
+playwright-report
+api-out.log
