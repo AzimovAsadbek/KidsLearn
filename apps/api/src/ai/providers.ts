@@ -95,6 +95,19 @@ export class PreviewImageProvider implements ImageGenerationProvider {
 }
 
 /**
+ * Minimal structural view of a fetch response. The global Response type
+ * resolves differently across @types/node minors, which broke remote builds;
+ * depending only on the members we use keeps every environment happy.
+ */
+interface FetchResponse {
+  ok: boolean;
+  status: number;
+  text(): Promise<string>;
+  json(): Promise<unknown>;
+  arrayBuffer(): Promise<ArrayBuffer>;
+}
+
+/**
  * OpenAI image generation. Only selected when both `AI_IMAGE_PROVIDER=openai`
  * and an API key are present; otherwise the factory falls back to preview mode
  * rather than failing at request time.
@@ -119,14 +132,14 @@ export class OpenAiImageProvider implements ImageGenerationProvider {
       .filter(Boolean)
       .join(" ");
 
-    const response = await fetch("https://api.openai.com/v1/images/generations", {
+    const response = (await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ model: this.model, prompt: guardedPrompt, size: "1024x1024", n: 1 }),
-    });
+    })) as unknown as FetchResponse;
 
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
@@ -147,7 +160,7 @@ export class OpenAiImageProvider implements ImageGenerationProvider {
     }
 
     if (first?.url) {
-      const image = await fetch(first.url);
+      const image = (await fetch(first.url)) as unknown as FetchResponse;
       if (!image.ok) throw new Error(`Could not download the generated image (${image.status})`);
       return {
         buffer: Buffer.from(await image.arrayBuffer()),
