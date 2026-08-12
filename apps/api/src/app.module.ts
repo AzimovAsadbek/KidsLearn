@@ -27,7 +27,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
 import { AiModule } from "./ai/ai.module";
 import { CertificatesModule } from "./certificates/certificates.module";
 import { AdminModule } from "./admin/admin.module";
-import { QueueModule } from "./queue/queue.module";
+import { QueueModule, queuesDisabled } from "./queue/queue.module";
 import { JobsModule } from "./jobs/jobs.module";
 
 @Module({
@@ -95,8 +95,9 @@ import { JobsModule } from "./jobs/jobs.module";
 
     PrismaModule,
     RedisModule,
-    QueueModule,
-    JobsModule,
+    QueueModule.register(),
+    // Workers and cron loops need a long-running process; a lambda has neither.
+    ...(queuesDisabled() ? [] : [JobsModule]),
     AuditModule,
     FeatureFlagsModule,
     AuthModule,

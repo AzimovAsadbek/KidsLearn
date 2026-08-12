@@ -7,6 +7,7 @@ import { Type } from "class-transformer";
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { CacheKeys, CacheService } from "../common/redis/redis.service";
+import { queuesDisabled } from "../queue/queue.module";
 import { CurrentUser, type RequestUser } from "../common/decorators";
 import { ChildAccessService } from "../children/child-access.service";
 
@@ -63,8 +64,14 @@ export class LeaderboardService {
         });
 
         // An empty materialised table (fresh install, or before the first cron
-        // run) rebuilds on demand rather than showing an empty board.
-        if (rows.length === 0) {
+        // run) rebuilds on demand rather than showing an empty board. Without
+        // a worker process (QUEUE_DRIVER=off) the hourly cron never fires, so
+        // staleness is also repaired here on the read path.
+        const stale =
+          rows.length > 0 &&
+          queuesDisabled() &&
+          Date.now() - rows[0].generatedAt.getTime() > 3_600_000;
+        if (rows.length === 0 || stale) {
           await this.rebuild(period);
           rows = await this.prisma.leaderboardEntry.findMany({
             where: { period, bucket },

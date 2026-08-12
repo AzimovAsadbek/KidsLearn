@@ -16,6 +16,17 @@ const nextConfig: NextConfig = {
       ? [{ protocol: "https", hostname: process.env.NEXT_PUBLIC_MEDIA_HOST }]
       : [],
   },
+  async rewrites() {
+    // In production the API is a separate deployment; proxying it through the
+    // web origin keeps auth cookies first-party and makes CORS moot.
+    const target = process.env.API_PROXY_TARGET;
+    if (!target) return [];
+    return [
+      { source: "/api/v1/:path*", destination: `${target}/api/v1/:path*` },
+      { source: "/api/docs", destination: `${target}/api/docs` },
+      { source: "/api/docs-json", destination: `${target}/api/docs-json` },
+    ];
+  },
   async headers() {
     return [
       {

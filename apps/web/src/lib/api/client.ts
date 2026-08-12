@@ -110,7 +110,12 @@ export interface RequestOptions extends Omit<RequestInit, "body"> {
 }
 
 function buildUrl(path: string, query?: RequestOptions["query"]): string {
-  const url = new URL(`${BASE_URL}${path.startsWith("/") ? path : `/${path}`}`);
+  const joined = `${BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+  // NEXT_PUBLIC_API_URL may be a relative path ("/api/v1") when the API is
+  // proxied through the web app's own origin — resolve it in the browser.
+  const url = joined.startsWith("http")
+    ? new URL(joined)
+    : new URL(joined, typeof window === "undefined" ? "http://localhost:3000" : window.location.origin);
   for (const [key, value] of Object.entries(query ?? {})) {
     if (value !== undefined && value !== null && value !== "") url.searchParams.set(key, String(value));
   }
